@@ -1,0 +1,24 @@
+# cabeza.obj - PLACEHOLDER
+# Cubo generado automaticamente (1.2 x 0.7 x 0.15).
+# Reemplaza este archivo por el modelo real de la cabeza
+# manteniendo el nombre 'cabeza.obj' o actualizando 'model_path' en config.json.
+v -1.2000 -0.7000 -0.1500
+v 1.2000 -0.7000 -0.1500
+v 1.2000 0.7000 -0.1500
+v -1.2000 0.7000 -0.1500
+v -1.2000 -0.7000 0.1500
+v 1.2000 -0.7000 0.1500
+v 1.2000 0.7000 0.1500
+v -1.2000 0.7000 0.1500
+vn 0.0 1.0 0.0
+vn 0.0 -1.0 0.0
+vn 0.0 0.0 1.0
+vn 0.0 0.0 -1.0
+vn 1.0 0.0 0.0
+vn -1.0 0.0 0.0
+f 4//1 3//1 7//1 8//1
+f 1//2 5//2 6//2 2//2
+f 5//3 8//3 7//3 6//3
+f 1//4 2//4 3//4 4//4
+f 2//5 6//5 7//5 3//5
+f 1//6 4//6 8//6 5//6

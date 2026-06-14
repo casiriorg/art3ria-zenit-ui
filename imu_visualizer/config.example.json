@@ -1,0 +1,31 @@
+{
+  "baud_rate": 115200,
+  "countdown_pre_s": 3,
+  "countdown_post_s": 3,
+  "sparkline_window_size": 100,
+  "panel_alpha": 0.75,
+  "active_camera_profile": "isometric",
+  "camera_profiles": {
+    "isometric": { "pitch_sign": 1, "yaw_sign": 1, "roll_sign": 1, "offset_deg": [30, 45, 0] },
+    "front":     { "pitch_sign": 1, "yaw_sign": 1, "roll_sign": 1, "offset_deg": [0, 0, 0] },
+    "top":       { "pitch_sign": 1, "yaw_sign": 1, "roll_sign": 1, "offset_deg": [90, 0, 0] }
+  },
+  "known_signals": {
+    "PPG": { "icon": "heart",  "color": "#EF5350" },
+    "GSR": { "icon": "hands",  "color": "#4FC3F7" }
+  },
+  "imu_packet_prefix": "IMU",
+  "ui": {
+    "bg_color":     "#161A27",
+    "accent_color": "#4FC3F7",
+    "text_color":   "#E8ECF0",
+    "font_family":  "Arial",
+    "window_width":  1280,
+    "window_height":  720
+  },
+  "model_path":           "assets/models/female_head.obj",
+  "model_pivot_offset":   [0, 0, 0],
+  "audio_folder":         "assets/audio",
+  "logs_folder":          "logs",
+  "log_flush_interval_s": 1.0
+}

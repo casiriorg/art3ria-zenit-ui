@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Configuracion local (se genera automaticamente desde config.example.json)
+imu_visualizer/config.json
+
+# Logs de sesiones CSV
+imu_visualizer/logs/*
+!imu_visualizer/logs/.gitkeep
+
+# Audios de usuario: no subir, salvo el WAV de prueba incluido en el repo
+imu_visualizer/assets/audio/*
+!imu_visualizer/assets/audio/test_tone.wav
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -1,0 +1,7 @@
+pygame>=2.5.0
+PyOpenGL>=3.1.7
+PyOpenGL_accelerate>=3.1.7
+pyserial>=3.5
+sounddevice>=0.4.6
+scipy>=1.11.0
+numpy>=1.26.0
