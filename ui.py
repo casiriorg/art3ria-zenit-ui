@@ -44,12 +44,47 @@ class Sparkline:
         pygame.draw.lines(surface, color, False, points, 2)
 
 
-def glyph_available(font: pygame.font.Font, text: str) -> bool:
-    """Indica si la fuente tiene glifos reales para todos los caracteres de `text`."""
-    try:
-        return all(m is not None for m in font.metrics(text))
-    except Exception:
-        return False
+def _draw_heart_icon(surface, x, y, color):
+    """Dibuja un icono de corazon con primitivas (sin depender de glifos de fuente)."""
+    cx, cy = x + 13, y + 11
+    pygame.draw.circle(surface, color, (cx - 5, cy), 6)
+    pygame.draw.circle(surface, color, (cx + 5, cy), 6)
+    pygame.draw.polygon(surface, color, [(cx - 10, cy + 2), (cx + 10, cy + 2), (cx, cy + 15)])
+
+
+def _draw_hand_icon(surface, x, y, color):
+    """Dibuja un icono de mano (GSR) con primitivas (sin depender de glifos de fuente)."""
+    # palma
+    pygame.draw.rect(surface, color, (x + 4, y + 12, 16, 11), border_radius=4)
+    # dedos
+    for fx, fh in ((x + 5, 9), (x + 9, 11), (x + 13, 11), (x + 17, 9)):
+        pygame.draw.rect(surface, color, (fx, y + 12 - fh, 3, fh), border_radius=1)
+    # pulgar
+    pygame.draw.rect(surface, color, (x + 1, y + 15, 6, 4), border_radius=2)
+
+
+ICON_DRAWERS = {
+    "heart": _draw_heart_icon,
+    "hands": _draw_hand_icon,
+}
+
+
+def _draw_triangle_icon(surface, center, size, color, direction="right"):
+    """Triangulo de navegacion/play (sin depender de glifos como ◀ ▶)."""
+    cx, cy = center
+    h = size / 2
+    if direction == "left":
+        points = [(cx + h, cy - h), (cx + h, cy + h), (cx - h, cy)]
+    else:
+        points = [(cx - h, cy - h), (cx - h, cy + h), (cx + h, cy)]
+    pygame.draw.polygon(surface, color, points)
+
+
+def _draw_square_icon(surface, center, size, color):
+    """Cuadrado de stop/abortar (sin depender del glifo ■)."""
+    rect = pygame.Rect(0, 0, size, size)
+    rect.center = center
+    pygame.draw.rect(surface, color, rect, border_radius=2)
 
 
 class SignalWidget:
@@ -58,7 +93,6 @@ class SignalWidget:
     def __init__(self, key: str, icon: str, color, fonts):
         self.key = key
         self.icon = icon
-        self.icon_ok = bool(icon) and glyph_available(fonts["icon"], icon)
         self.color = color
         self.fonts = fonts
         self.sparkline = Sparkline(CFG.sparkline_window_size)
@@ -70,9 +104,9 @@ class SignalWidget:
     def draw(self, surface: pygame.Surface, rect: pygame.Rect, value):
         pygame.draw.rect(surface, (30, 34, 48, 200), rect, border_radius=8)
 
-        if self.icon_ok:
-            icon_surf = self.fonts["icon"].render(self.icon, True, self.color)
-            surface.blit(icon_surf, (rect.x + 10, rect.y + 8))
+        drawer = ICON_DRAWERS.get(self.icon)
+        if drawer is not None:
+            drawer(surface, rect.x + 6, rect.y + 6, self.color)
         else:
             pygame.draw.circle(surface, self.color, (rect.x + 23, rect.y + 21), 11)
 
@@ -109,10 +143,9 @@ class AppUI:
         if self.camera_profile not in self.camera_profiles:
             self.camera_profile = self.camera_profiles[0]
 
-        icon_glyphs = {"heart": "♥", "hands": "✋"}
         self.signal_widgets = {}
         for key, meta in CFG.known_signals.items():
-            icon = icon_glyphs.get(meta.get("icon"), "")
+            icon = meta.get("icon", "")
             self.signal_widgets[key] = SignalWidget(key, icon, hex_to_rgb(meta["color"]), self.fonts)
 
         self.session_active = False
@@ -130,18 +163,16 @@ class AppUI:
             label = pygame.font.SysFont(family, 16, bold=True)
             small = pygame.font.SysFont(family, 14)
             big = pygame.font.SysFont("Consolas", 28, bold=True)
-            icon = pygame.font.SysFont(family, 26)
             countdown = pygame.font.SysFont(family, COUNTDOWN_FONT_SIZE, bold=True)
         except Exception:
             title = pygame.font.SysFont("Arial", 22, bold=True)
             label = pygame.font.SysFont("Arial", 16, bold=True)
             small = pygame.font.SysFont("Arial", 14)
             big = pygame.font.SysFont("Courier", 28, bold=True)
-            icon = pygame.font.SysFont("Arial", 26)
             countdown = pygame.font.SysFont("Arial", COUNTDOWN_FONT_SIZE, bold=True)
         return {
             "title": title, "label": label, "small": small,
-            "big": big, "icon": icon, "countdown": countdown,
+            "big": big, "countdown": countdown,
         }
 
     # ------------------------------------------------------------------
@@ -324,9 +355,8 @@ class AppUI:
         toggle_rect = pygame.Rect(0, H // 2 - 20, 24, 40)
         self.rects["panel_toggle"] = toggle_rect
         pygame.draw.rect(surf, (40, 44, 60, 220), toggle_rect, border_radius=4)
-        arrow = "◀" if self.panel_expanded else "▶"
-        arrow_surf = self.fonts["label"].render(arrow, True, self.colors["text"])
-        surf.blit(arrow_surf, (toggle_rect.x + 4, toggle_rect.y + 10))
+        direction = "left" if self.panel_expanded else "right"
+        _draw_triangle_icon(surf, toggle_rect.center, 12, self.colors["text"], direction)
 
         if not self.panel_expanded:
             return
@@ -371,7 +401,7 @@ class AppUI:
 
         refresh_rect = pygame.Rect(pad, y, panel_w - 2 * pad, 30)
         pygame.draw.rect(panel, (40, 44, 60, 220), refresh_rect, border_radius=6)
-        refresh_label = self.fonts["label"].render("↺ Refrescar", True, self.colors["text"])
+        refresh_label = self.fonts["label"].render("Refrescar", True, self.colors["text"])
         panel.blit(refresh_label, (refresh_rect.x + 10, refresh_rect.y + 5))
         self.rects["refresh_btn"] = refresh_rect.move(toggle_rect.width, 0)
         y += 30 + 14
@@ -408,10 +438,8 @@ class AppUI:
         next_rect = pygame.Rect(panel_w - pad - 28, y, 28, 28)
         pygame.draw.rect(panel, (40, 44, 60, 220), prev_rect, border_radius=4)
         pygame.draw.rect(panel, (40, 44, 60, 220), next_rect, border_radius=4)
-        panel.blit(self.fonts["label"].render("◀", True, self.colors["text"]),
-                   (prev_rect.x + 8, prev_rect.y + 4))
-        panel.blit(self.fonts["label"].render("▶", True, self.colors["text"]),
-                   (next_rect.x + 8, next_rect.y + 4))
+        _draw_triangle_icon(panel, prev_rect.center, 10, self.colors["text"], "left")
+        _draw_triangle_icon(panel, next_rect.center, 10, self.colors["text"], "right")
         self.rects["cam_prev"] = prev_rect.move(toggle_rect.width, 0)
         self.rects["cam_next"] = next_rect.move(toggle_rect.width, 0)
 
@@ -436,13 +464,17 @@ class AppUI:
         play_enabled = self._play_enabled()
         play_color = self.colors["accent"] if play_enabled else (60, 64, 76)
         pygame.draw.rect(surf, play_color, play_rect, border_radius=8)
-        play_label = self.fonts["label"].render("▶ REPRODUCIR", True, (15, 18, 26))
-        surf.blit(play_label, play_label.get_rect(center=play_rect.center))
+        play_label = self.fonts["label"].render("REPRODUCIR", True, (15, 18, 26))
+        play_text_rect = play_label.get_rect(center=play_rect.center)
+        _draw_triangle_icon(surf, (play_text_rect.x - 14, play_text_rect.centery), 12, (15, 18, 26))
+        surf.blit(play_label, play_text_rect)
 
         abort_color = (210, 70, 70) if self.session_active else (60, 64, 76)
         pygame.draw.rect(surf, abort_color, abort_rect, border_radius=8)
-        abort_label = self.fonts["label"].render("■ ABORTAR", True, (15, 18, 26))
-        surf.blit(abort_label, abort_label.get_rect(center=abort_rect.center))
+        abort_label = self.fonts["label"].render("ABORTAR", True, (15, 18, 26))
+        abort_text_rect = abort_label.get_rect(center=abort_rect.center)
+        _draw_square_icon(surf, (abort_text_rect.x - 14, abort_text_rect.centery), 12, (15, 18, 26))
+        surf.blit(abort_label, abort_text_rect)
 
     def _draw_status_bar(self, surf, W, H, ctx):
         bar_rect = pygame.Rect(0, H - STATUS_BAR_HEIGHT, W, STATUS_BAR_HEIGHT)
