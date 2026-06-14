@@ -9,7 +9,6 @@ biometricos en CSV para analisis posterior.
 ## Instalacion
 
 ```
-cd imu_visualizer
 python3 -m pip install -r requirements.txt
 ```
 
@@ -41,7 +40,7 @@ en Windows):
 
 ```
 python scripts/simulate_embedded.py COM10
-python imu_visualizer/main.py COM11
+python main.py COM11
 ```
 
 ### Controles de teclado

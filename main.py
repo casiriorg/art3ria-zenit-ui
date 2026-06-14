@@ -246,6 +246,7 @@ def main():
         print("\n[info] Interrumpido (Ctrl+C). Cerrando...")
     finally:
         glDeleteTextures([hud_tex])
+        model.destroy()
         reader.stop()
         audio.exit()
         logger.exit()

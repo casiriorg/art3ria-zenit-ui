@@ -5,7 +5,8 @@ import os
 
 from OpenGL.GL import (
     glBegin, glEnd, glVertex3f, glColor3f, glLineWidth,
-    GL_QUADS, GL_TRIANGLES, GL_LINES,
+    glGenLists, glNewList, glEndList, glCallList, glDeleteLists,
+    GL_QUADS, GL_TRIANGLES, GL_LINES, GL_COMPILE,
 )
 
 from config import CFG, abs_path
@@ -151,6 +152,7 @@ class ObjModel:
         self.faces = []  # list of (vertex_indices, normal_index_or_None)
         self.using_placeholder = False
         self._hardcoded_fallback = False
+        self._display_list = None
         self.load(self.path)
 
     def load(self, path: str):
@@ -163,6 +165,7 @@ class ObjModel:
             self._load_fallback_cube()
             self.using_placeholder = True
             self._hardcoded_fallback = True
+        self._build_display_list()
 
     @staticmethod
     def _is_placeholder_file(path: str) -> bool:
@@ -236,12 +239,31 @@ class ObjModel:
         ]
         self.faces = [(f[0], f[1]) for f in self._cube_faces]
 
-    def draw(self):
-        """Dibuja el modelo cargado (o el cubo placeholder) con glBegin/glEnd."""
+    def _build_display_list(self):
+        """Compila la geometria en una display list para evitar miles de llamadas
+        glBegin/glVertex3f por frame (el costo dominante en PyOpenGL legacy)."""
+        if self._display_list is not None:
+            glDeleteLists(self._display_list, 1)
+
+        self._display_list = glGenLists(1)
+        glNewList(self._display_list, GL_COMPILE)
         if self._hardcoded_fallback:
             self._draw_fallback_cube()
-            return
+        else:
+            self._draw_model()
+        glEndList()
 
+    def draw(self):
+        """Dibuja el modelo cargado (o el cubo placeholder) via display list."""
+        glCallList(self._display_list)
+
+    def destroy(self):
+        """Libera la display list de OpenGL."""
+        if self._display_list is not None:
+            glDeleteLists(self._display_list, 1)
+            self._display_list = None
+
+    def _draw_model(self):
         for idx, nidx in self.faces:
             if nidx is not None and 0 <= nidx < len(self.normals):
                 nx, ny, nz = self.normals[nidx]

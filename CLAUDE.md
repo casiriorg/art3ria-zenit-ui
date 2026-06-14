@@ -4,27 +4,27 @@ Guia para Claude Code al trabajar en este repositorio.
 
 ## Que es este proyecto
 
-`imu_visualizer/` es una aplicacion de escritorio (Python 3.12, Windows) para un
-proyecto de artes visuales sobre percepcion del sonido y biometrias fisiologicas.
-Lee datos en tiempo real de una placa XIAO nRF52840 + sensor IMU BNO085 por USB
-serial, visualiza la orientacion en 3D con quaterniones (sin gimbal lock),
-reproduce estimulos sonoros WAV y registra los datos biometricos en CSV.
+Aplicacion de escritorio (Python 3.12, Windows) para un proyecto de artes visuales sobre
+percepcion del sonido y biometrias fisiologicas. Lee datos en tiempo real de una placa
+XIAO nRF52840 + sensor IMU BNO085 por USB serial, visualiza la orientacion en 3D con
+quaterniones (sin gimbal lock), reproduce estimulos sonoros WAV y registra los datos
+biometricos en CSV.
 
-Ver `imu_visualizer/README.md` para instalacion, uso, protocolo serial y esquema CSV.
+Ver `README.md` para instalacion, uso, protocolo serial y esquema CSV.
 
 ## Estructura
 
 ```
-imu_visualizer/
 ├── main.py            # Entry point, loop pygame+OpenGL a 60 FPS
 ├── config.py          # Carga config.json (singleton CFG), merge sobre config.example.json
 ├── serial_reader.py   # Thread daemon: autodetecta puerto, parsea IMU + senales KEY:VALUE
 ├── audio_player.py     # Thread daemon: reproduccion WAV con sounddevice (no pygame.mixer)
 ├── logger.py           # Thread NO daemon: CSV con columnas dinamicas, flush periodico
-├── renderer.py         # Quaterniones, loader OBJ con fallback a cubo, perfiles de camara
+├── renderer.py         # Quaterniones, loader OBJ con fallback a cubo, display lists, perfiles de camara
 ├── ui.py               # HUD, panel lateral, sparklines, dialogos modales
 ├── config.json         # Config activa (generada, no se versiona)
 ├── config.example.json # Defaults de referencia (si se edita, mantener sincronizado el README)
+├── scripts/simulate_embedded.py  # Simulador de la placa (modo serial o TCP)
 ├── assets/models/cabeza.obj  # Placeholder generado automaticamente si falta
 ├── assets/audio/        # WAVs del usuario (ignorados salvo test_tone.wav)
 └── logs/                 # CSVs de sesion (ignorados)
@@ -48,7 +48,6 @@ imu_visualizer/
 ## Como probar
 
 ```
-cd imu_visualizer
 python3 -m pip install -r requirements.txt
 python3 main.py
 ```

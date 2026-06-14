@@ -1,6 +1,6 @@
 """Simulador de la placa embebida (XIAO nRF52840 + BNO085) para desarrollo sin hardware.
 
-Escribe lineas con el mismo formato que espera `imu_visualizer/serial_reader.py`:
+Escribe lineas con el mismo formato que espera `serial_reader.py`:
 
     IMU:qw,qx,qy,qz,roll,pitch,yaw
     PPG:valor
@@ -14,14 +14,14 @@ Modo TCP (recomendado, no requiere drivers ni puertos virtuales):
     1. Ejecuta el simulador como servidor TCP local:
            python scripts/simulate_embedded.py --tcp 9000
     2. Apunta la app al socket en lugar de un puerto serial real:
-           python imu_visualizer/main.py socket://127.0.0.1:9000
+           python main.py socket://127.0.0.1:9000
 
 Modo puerto serial / virtual (com0com en Windows):
     1. Crea un par de puertos serie virtuales enlazados, p.ej. COM10 <-> COM11.
     2. Ejecuta:
            python scripts/simulate_embedded.py COM10
     3. Apunta la app al otro extremo del par:
-           python imu_visualizer/main.py COM11
+           python main.py COM11
 
 Uso:
     python scripts/simulate_embedded.py PUERTO [--baud BAUD]

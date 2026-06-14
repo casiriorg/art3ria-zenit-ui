@@ -6,15 +6,15 @@ __pycache__/
 venv/
 
 # Configuracion local (se genera automaticamente desde config.example.json)
-imu_visualizer/config.json
+config.json
 
 # Logs de sesiones CSV
-imu_visualizer/logs/*
-!imu_visualizer/logs/.gitkeep
+logs/*
+!logs/.gitkeep
 
 # Audios de usuario: no subir, salvo el WAV de prueba incluido en el repo
-imu_visualizer/assets/audio/*
-!imu_visualizer/assets/audio/test_tone.wav
+assets/audio/*
+!assets/audio/test_tone.wav
 
 # Editor / OS
 .vscode/
