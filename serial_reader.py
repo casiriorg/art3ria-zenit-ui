@@ -12,7 +12,15 @@ from config import CFG
 
 
 def find_port():
-    """Autodetecta el puerto USB de la placa XIAO/nRF52. Imprime la lista si hay ambiguedad."""
+    """Autodetecta el puerto USB de la placa XIAO/nRF52.
+
+    Busca palabras clave en el descriptor de cada puerto disponible.
+    Si hay ambiguedad (varios puertos USB sin descriptor reconocible),
+    imprime la lista completa y devuelve None.
+
+    Returns:
+        Nombre del puerto (ej. 'COM11') o None si no puede determinarse.
+    """
     keywords = ("nRF52", "Seeed", "XIAO", "USB Serial", "CDC", "usbmodem")
     usb_candidates = []
     for p in serial.tools.list_ports.comports():
@@ -34,6 +42,14 @@ class SerialReader(threading.Thread):
     """Lee continuamente el puerto serial y expone el ultimo quaternion/euler y senales."""
 
     def __init__(self, port=None, baud=None, log_queue: queue.Queue = None):
+        """
+        Args:
+            port: Puerto serial a usar (ej. 'COM11', 'socket://127.0.0.1:9000').
+                Si es None, se intenta autodetectar con find_port().
+            baud: Baudrate de comunicacion. Si es None, se usa CFG.baud_rate.
+            log_queue: Cola donde se publican las muestras para el CSVLogger.
+                Si es None, se crea una cola interna que se descarta.
+        """
         super().__init__(daemon=True)
         self.port = port if port is not None else find_port()
         self.baud = baud if baud is not None else CFG.baud_rate
@@ -49,6 +65,7 @@ class SerialReader(threading.Thread):
         self._samples = deque(maxlen=60)
 
     def run(self):
+        """Bucle principal del thread: conecta al puerto y parsea lineas hasta stop()."""
         if self.port is None:
             print("[ERROR] No hay puerto serial disponible.")
             return
@@ -88,6 +105,11 @@ class SerialReader(threading.Thread):
             self.connected = False
 
     def _parse_imu(self, payload: str):
+        """Parsea el payload de un paquete IMU y actualiza quat/euler.
+
+        Args:
+            payload: Cadena con 7 valores separados por coma: qw,qx,qy,qz,roll,pitch,yaw.
+        """
         parts = payload.split(",")
         if len(parts) != 7:
             return
@@ -102,6 +124,11 @@ class SerialReader(threading.Thread):
         self.log_queue.put((time.time(), {"qw": qw, "qx": qx, "qy": qy, "qz": qz}))
 
     def _parse_signal(self, line: str):
+        """Parsea una linea CLAVE:VALOR y actualiza el diccionario de senales.
+
+        Args:
+            line: Linea serial con formato 'CLAVE:valor_numerico'.
+        """
         key, _, raw_value = line.partition(":")
         key = key.strip()
         try:
@@ -114,21 +141,36 @@ class SerialReader(threading.Thread):
         self.log_queue.put((time.time(), {key: value}))
 
     def get_imu(self):
-        """Devuelve el ultimo (quat, euler) recibido."""
+        """Devuelve el ultimo quaternion y euler recibidos, de forma thread-safe.
+
+        Returns:
+            Tupla (quat, euler) donde quat=(qw, qx, qy, qz) y
+            euler=(roll, pitch, yaw) en grados.
+        """
         with self.lock:
             return self.quat, self.euler
 
     def get_signals(self) -> dict:
-        """Devuelve una copia del diccionario de senales fisiologicas/comportamentales."""
+        """Devuelve una copia del diccionario de senales, de forma thread-safe.
+
+        Returns:
+            Diccionario {clave: valor_float} con las ultimas lecturas de cada senal.
+        """
         with self.lock:
             return dict(self.signals)
 
     def rate_hz(self) -> float:
-        """Tasa de actualizacion real medida en Hz."""
+        """Calcula la tasa de actualizacion real del sensor en Hz.
+
+        Returns:
+            Hz medidos sobre la ventana de las ultimas 60 muestras,
+            o 0.0 si hay menos de 2 muestras disponibles.
+        """
         if len(self._samples) < 2:
             return 0.0
         dt = self._samples[-1] - self._samples[0]
         return (len(self._samples) - 1) / dt if dt > 0 else 0.0
 
     def stop(self):
+        """Indica al thread que deje de leer el puerto serial en el proximo ciclo."""
         self.stop_flag = True

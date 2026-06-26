@@ -23,6 +23,7 @@ class CSVLogger(threading.Thread):
     """
 
     def __init__(self):
+        """Inicializa la cola de comandos y el estado interno del logger."""
         super().__init__(daemon=False)
         self.cmd_queue: queue.Queue = queue.Queue()
         self._exit_flag = False
@@ -36,6 +37,7 @@ class CSVLogger(threading.Thread):
         self._last_flush = 0.0
 
     def run(self):
+        """Bucle principal del thread: procesa comandos y hace flush periodico al CSV."""
         while not self._exit_flag:
             timeout = CFG.log_flush_interval_s
             try:
@@ -61,6 +63,13 @@ class CSVLogger(threading.Thread):
                 self._active = False
 
     def _start(self, participant_name: str, session_id: str, audio_file: str):
+        """Abre una nueva sesion: determina el nombre del CSV y reinicia el estado interno.
+
+        Args:
+            participant_name: Nombre del participante (usado en el nombre del archivo).
+            session_id: UUID unico de la sesion.
+            audio_file: Nombre del archivo de audio reproducido en la sesion.
+        """
         os.makedirs(abs_path(CFG.logs_folder), exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{participant_name}_{stamp}.csv"
@@ -77,6 +86,15 @@ class CSVLogger(threading.Thread):
         self._last_flush = time.monotonic()
 
     def _append_row(self, timestamp_iso: str, estado: str, datos_dict: dict):
+        """Agrega una fila al buffer en memoria y hace flush si corresponde por tiempo.
+
+        Si datos_dict contiene claves nuevas, expande los fieldnames del CSV.
+
+        Args:
+            timestamp_iso: Timestamp en formato ISO 8601.
+            estado: Estado de la sesion ('waiting' o 'record').
+            datos_dict: Diccionario con los datos de la muestra (quat, senales, etc.).
+        """
         if not self._active:
             return
         row = {
@@ -95,6 +113,7 @@ class CSVLogger(threading.Thread):
             self._flush_to_disk()
 
     def _flush_to_disk(self):
+        """Escribe todas las filas del buffer al archivo CSV en disco y actualiza el timestamp."""
         if self._filepath is None:
             return
         with open(self._filepath, "w", newline="", encoding="utf-8") as f:
@@ -105,21 +124,33 @@ class CSVLogger(threading.Thread):
         self._last_flush = time.monotonic()
 
     def start_session(self, participant_name: str, session_id: str, audio_file: str):
-        """Inicia una nueva sesion de grabacion."""
+        """Encola el inicio de una nueva sesion de grabacion.
+
+        Args:
+            participant_name: Nombre del participante.
+            session_id: UUID unico de la sesion.
+            audio_file: Nombre del archivo de audio de la sesion.
+        """
         self.cmd_queue.put(("START", participant_name, session_id, audio_file))
 
     def log(self, timestamp_iso: str, estado: str, datos_dict: dict):
-        """Encola una muestra para ser registrada."""
+        """Encola una muestra para ser registrada en el CSV.
+
+        Args:
+            timestamp_iso: Timestamp en formato ISO 8601.
+            estado: Estado de la sesion en este instante ('waiting' o 'record').
+            datos_dict: Datos de la muestra (ej. {'qw': 1.0, 'PPG': 89.4}).
+        """
         self.cmd_queue.put(("DATA", timestamp_iso, estado, datos_dict))
 
     def stop(self):
-        """Finaliza la sesion actual, escribiendo el CSV completo."""
+        """Finaliza la sesion normalmente y escribe el CSV completo a disco."""
         self.cmd_queue.put(("STOP",))
 
     def abort(self):
-        """Aborta la sesion actual, escribiendo lo registrado hasta el momento."""
+        """Aborta la sesion y escribe a disco lo registrado hasta el momento."""
         self.cmd_queue.put(("ABORT",))
 
     def exit(self):
-        """Senaliza al thread que finalice (usado al cerrar la aplicacion)."""
+        """Senaliza al thread que finalice (llamar antes de join())."""
         self.cmd_queue.put(("EXIT",))

@@ -30,6 +30,33 @@ Ver `README.md` para instalacion, uso, protocolo serial y esquema CSV.
 └── logs/                 # CSVs de sesion (ignorados)
 ```
 
+## Documentacion de funciones
+
+Toda funcion o metodo Python que se cree o modifique debe tener un docstring en
+**formato Google**. Estructura obligatoria:
+
+```python
+def ejemplo(param1: str, param2: int = 0) -> bool:
+    """Resumen de una linea que describe que hace la funcion.
+
+    Args:
+        param1: Descripcion del primer parametro.
+        param2: Descripcion del segundo parametro.
+
+    Returns:
+        Descripcion del valor de retorno.
+
+    Raises:
+        ValueError: Cuando y por que se lanza esta excepcion.
+    """
+```
+
+Reglas:
+- La primera linea es un resumen corto (no termina en punto).
+- Omitir secciones que no apliquen (si no hay `Returns`, no escribir la seccion).
+- Para metodos `__init__`, documentar los parametros en la seccion `Args` del propio `__init__`.
+- Los metodos privados (`_nombre`) tambien requieren docstring si tienen parametros no obvios.
+
 ## Restricciones importantes (no romper)
 
 - Python 3.12 / Windows. No usar APIs exclusivas de Linux/macOS.

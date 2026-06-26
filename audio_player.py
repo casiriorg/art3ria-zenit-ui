@@ -20,6 +20,7 @@ class AudioPlayer(threading.Thread):
     """
 
     def __init__(self):
+        """Inicializa las colas de comandos y eventos, y la senal de abort."""
         super().__init__(daemon=True)
         self.cmd_queue: queue.Queue = queue.Queue()
         self.event_queue: queue.Queue = queue.Queue()
@@ -27,6 +28,7 @@ class AudioPlayer(threading.Thread):
         self._exit_flag = False
 
     def run(self):
+        """Bucle principal del thread: espera comandos y despacha la reproduccion."""
         while not self._exit_flag:
             try:
                 cmd, payload = self.cmd_queue.get(timeout=0.2)
@@ -45,7 +47,14 @@ class AudioPlayer(threading.Thread):
                 self.event_queue.put(("ABORTED", None))
 
     def _interruptible_sleep(self, seconds: float) -> bool:
-        """Duerme hasta `seconds` en pasos cortos. Devuelve False si fue abortado."""
+        """Espera hasta `seconds` en pasos cortos, interrumpible si se aborta.
+
+        Args:
+            seconds: Duracion maxima de la espera en segundos.
+
+        Returns:
+            True si completo la espera normalmente; False si fue interrumpida por abort.
+        """
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             if self._abort_event.is_set():
@@ -54,6 +63,14 @@ class AudioPlayer(threading.Thread):
         return True
 
     def _play(self, filepath: str):
+        """Ejecuta el ciclo completo de reproduccion: pre-countdown, audio, post-countdown.
+
+        Publica eventos en event_queue a medida que avanza el ciclo.
+        Retorna anticipadamente si se recibe una senal de abort en cualquier etapa.
+
+        Args:
+            filepath: Ruta absoluta al archivo WAV a reproducir.
+        """
         self.event_queue.put(("COUNTDOWN_PRE", CFG.countdown_pre_s))
         if not self._interruptible_sleep(CFG.countdown_pre_s):
             return
@@ -89,13 +106,17 @@ class AudioPlayer(threading.Thread):
         self.event_queue.put(("DONE", None))
 
     def play(self, filepath: str):
-        """Encola la reproduccion del archivo WAV indicado."""
+        """Encola la reproduccion del archivo WAV indicado.
+
+        Args:
+            filepath: Ruta absoluta al archivo WAV a reproducir.
+        """
         self.cmd_queue.put(("PLAY", filepath))
 
     def abort(self):
-        """Aborta la reproduccion en curso (<=100ms)."""
+        """Aborta la reproduccion en curso en menos de 100 ms."""
         self.cmd_queue.put(("ABORT", None))
 
     def exit(self):
-        """Senaliza al thread que finalice."""
+        """Senaliza al thread que finalice el bucle principal."""
         self.cmd_queue.put(("EXIT", None))

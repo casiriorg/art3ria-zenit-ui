@@ -35,7 +35,12 @@ from ui import AppUI
 
 
 def upload_texture(tex_id, surface):
-    """Sube una superficie pygame como textura OpenGL (RGBA)."""
+    """Sube una superficie pygame como textura OpenGL RGBA.
+
+    Args:
+        tex_id: ID de textura OpenGL previamente generado con glGenTextures.
+        surface: Superficie pygame.Surface a cargar como textura.
+    """
     W, H = surface.get_size()
     data = pygame.image.tostring(surface, "RGBA", True)
     glBindTexture(GL_TEXTURE_2D, tex_id)
@@ -46,7 +51,16 @@ def upload_texture(tex_id, surface):
 
 
 def draw_hud_quad(tex_id, W, H):
-    """Dibuja la textura del HUD como un quad en proyeccion ortografica de pantalla completa."""
+    """Dibuja la textura del HUD como quad en proyeccion ortografica a pantalla completa.
+
+    Deshabilita el depth test durante el dibujado y restaura la proyeccion
+    perspectiva al finalizar.
+
+    Args:
+        tex_id: ID de textura OpenGL con el HUD renderizado.
+        W: Ancho de la ventana en pixeles.
+        H: Alto de la ventana en pixeles.
+    """
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     glOrtho(0, W, 0, H, -1, 1)
@@ -78,6 +92,11 @@ def draw_hud_quad(tex_id, W, H):
 
 
 def main():
+    """Punto de entrada: inicializa todos los subsistemas y ejecuta el loop principal.
+
+    Acepta un argumento de linea de comandos opcional con el puerto serial o socket
+    (ej. 'COM11' o 'socket://127.0.0.1:9000').
+    """
     ensure_dirs()
     ensure_placeholder_obj()
 

@@ -145,18 +145,27 @@ def run_tcp(host: str, port: int):
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen(1)
+    # Timeout de 1 s en accept() para que Ctrl+C pueda ser procesado en Windows.
+    # Sin timeout, accept() bloquea indefinidamente y la consola se congela.
+    srv.settimeout(1.0)
     print(f"[sim] Escuchando en {host}:{port}")
     print(f"[sim] Apunta la app a: socket://{host}:{port}")
     print("[sim] Ctrl+C para detener.")
 
-    while True:
-        conn, addr = srv.accept()
-        print(f"[sim] Cliente conectado desde {addr}")
-        try:
-            with conn:
-                simulation_loop(conn.sendall)
-        except (BrokenPipeError, ConnectionResetError, OSError) as e:
-            print(f"[sim] Cliente desconectado ({e}). Esperando nueva conexion...")
+    try:
+        while True:
+            try:
+                conn, addr = srv.accept()
+            except socket.timeout:
+                continue
+            print(f"[sim] Cliente conectado desde {addr}")
+            try:
+                with conn:
+                    simulation_loop(conn.sendall)
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                print(f"[sim] Cliente desconectado ({e}). Esperando nueva conexion...")
+    finally:
+        srv.close()
 
 
 def main():

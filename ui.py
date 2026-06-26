@@ -15,7 +15,14 @@ STATUS_BAR_HEIGHT = 24
 
 
 def hex_to_rgb(hex_str: str):
-    """Convierte '#RRGGBB' a tupla (r,g,b)."""
+    """Convierte un color '#RRGGBB' a tupla (r, g, b).
+
+    Args:
+        hex_str: Color hexadecimal con o sin prefijo '#'.
+
+    Returns:
+        Tupla (r, g, b) con valores enteros en el rango 0-255.
+    """
     hex_str = hex_str.lstrip("#")
     return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
 
@@ -24,12 +31,30 @@ class Sparkline:
     """Historial de valores con normalizacion min/max deslizante, dibujable con lineas."""
 
     def __init__(self, maxlen: int):
+        """
+        Args:
+            maxlen: Numero maximo de puntos a conservar en el historial deslizante.
+        """
         self.values = deque(maxlen=maxlen)
 
     def add(self, value: float):
+        """Agrega un nuevo valor al historial deslizante.
+
+        Args:
+            value: Valor numerico a agregar.
+        """
         self.values.append(value)
 
     def draw(self, surface: pygame.Surface, rect: pygame.Rect, color):
+        """Dibuja la sparkline en la superficie dentro del rectangulo indicado.
+
+        No dibuja nada si hay menos de 2 puntos en el historial.
+
+        Args:
+            surface: Superficie pygame donde dibujar.
+            rect: Rectangulo que define el area de dibujo.
+            color: Color RGB o RGBA de la linea.
+        """
         if len(self.values) < 2:
             return
         vmin, vmax = min(self.values), max(self.values)
@@ -45,7 +70,14 @@ class Sparkline:
 
 
 def _draw_heart_icon(surface, x, y, color):
-    """Dibuja un icono de corazon con primitivas (sin depender de glifos de fuente)."""
+    """Dibuja un icono de corazon con circulos y un poligono.
+
+    Args:
+        surface: Superficie pygame destino.
+        x: Coordenada x de la esquina superior izquierda del icono.
+        y: Coordenada y de la esquina superior izquierda del icono.
+        color: Color RGB del icono.
+    """
     cx, cy = x + 13, y + 11
     pygame.draw.circle(surface, color, (cx - 5, cy), 6)
     pygame.draw.circle(surface, color, (cx + 5, cy), 6)
@@ -53,7 +85,14 @@ def _draw_heart_icon(surface, x, y, color):
 
 
 def _draw_hand_icon(surface, x, y, color):
-    """Dibuja un icono de mano (GSR) con primitivas (sin depender de glifos de fuente)."""
+    """Dibuja un icono de mano estilizado con rectangulos (usado para GSR).
+
+    Args:
+        surface: Superficie pygame destino.
+        x: Coordenada x de la esquina superior izquierda del icono.
+        y: Coordenada y de la esquina superior izquierda del icono.
+        color: Color RGB del icono.
+    """
     # palma
     pygame.draw.rect(surface, color, (x + 4, y + 12, 16, 11), border_radius=4)
     # dedos
@@ -70,7 +109,15 @@ ICON_DRAWERS = {
 
 
 def _draw_triangle_icon(surface, center, size, color, direction="right"):
-    """Triangulo de navegacion/play (sin depender de glifos como ◀ ▶)."""
+    """Dibuja un triangulo de navegacion apuntando a la izquierda o derecha.
+
+    Args:
+        surface: Superficie pygame destino.
+        center: Tupla (cx, cy) con el centro del triangulo.
+        size: Tamano (altura y base) del triangulo en pixeles.
+        color: Color RGB del triangulo.
+        direction: 'right' (por defecto) o 'left'.
+    """
     cx, cy = center
     h = size / 2
     if direction == "left":
@@ -81,7 +128,14 @@ def _draw_triangle_icon(surface, center, size, color, direction="right"):
 
 
 def _draw_square_icon(surface, center, size, color):
-    """Cuadrado de stop/abortar (sin depender del glifo ■)."""
+    """Dibuja un cuadrado de stop/abortar centrado en el punto indicado.
+
+    Args:
+        surface: Superficie pygame destino.
+        center: Tupla (cx, cy) con el centro del cuadrado.
+        size: Lado del cuadrado en pixeles.
+        color: Color RGB del cuadrado.
+    """
     rect = pygame.Rect(0, 0, size, size)
     rect.center = center
     pygame.draw.rect(surface, color, rect, border_radius=2)
@@ -91,6 +145,13 @@ class SignalWidget:
     """Panel de senal principal (PPG/GSR): icono, valor numerico y sparkline."""
 
     def __init__(self, key: str, icon: str, color, fonts):
+        """
+        Args:
+            key: Identificador de la senal (ej. 'PPG', 'GSR').
+            icon: Nombre del icono a dibujar (ej. 'heart', 'hands').
+            color: Tupla RGB del color principal del widget.
+            fonts: Diccionario de fuentes pygame {'small': ..., 'big': ...}.
+        """
         self.key = key
         self.icon = icon
         self.color = color
@@ -98,10 +159,22 @@ class SignalWidget:
         self.sparkline = Sparkline(CFG.sparkline_window_size)
 
     def update(self, value):
+        """Agrega un nuevo valor al sparkline del widget.
+
+        Args:
+            value: Valor numerico o None si no hay lectura disponible.
+        """
         if value is not None:
             self.sparkline.add(value)
 
     def draw(self, surface: pygame.Surface, rect: pygame.Rect, value):
+        """Dibuja el widget completo: fondo, icono, etiqueta, valor y sparkline.
+
+        Args:
+            surface: Superficie pygame destino.
+            rect: Rectangulo que define la posicion y tamano del widget.
+            value: Valor numerico actual o None para mostrar '--'.
+        """
         pygame.draw.rect(surface, (30, 34, 48, 200), rect, border_radius=8)
 
         drawer = ICON_DRAWERS.get(self.icon)
@@ -125,6 +198,7 @@ class AppUI:
     """Orquesta todo el HUD: panel lateral, widgets de senales, controles y dialogos."""
 
     def __init__(self):
+        """Inicializa el HUD: colores, fuentes, lista de audios y widgets de senales."""
         self.colors = {
             "bg": hex_to_rgb(CFG.ui["bg_color"]),
             "accent": hex_to_rgb(CFG.ui["accent_color"]),
@@ -157,6 +231,11 @@ class AppUI:
 
     # ------------------------------------------------------------------
     def _load_fonts(self):
+        """Carga las fuentes del sistema configuradas en CFG.ui.font_family.
+
+        Returns:
+            Diccionario con fuentes pygame: {'title', 'label', 'small', 'big', 'countdown'}.
+        """
         family = CFG.ui.get("font_family", "Arial")
         try:
             title = pygame.font.SysFont(family, 22, bold=True)
@@ -177,7 +256,10 @@ class AppUI:
 
     # ------------------------------------------------------------------
     def refresh_audio_files(self):
-        """Reescanea CFG.audio_folder buscando archivos .wav."""
+        """Reescanea CFG.audio_folder buscando archivos .wav y actualiza la lista.
+
+        Reinicia el scroll y deselecciona el audio actual si ya no existe en la carpeta.
+        """
         folder = abs_path(CFG.audio_folder)
         os.makedirs(folder, exist_ok=True)
         self.audio_files = sorted(
@@ -188,26 +270,48 @@ class AppUI:
         self.audio_scroll = 0
 
     def selected_audio_path(self):
+        """Devuelve la ruta absoluta del archivo de audio seleccionado.
+
+        Returns:
+            Ruta absoluta como string, o None si no hay ninguno seleccionado.
+        """
         if self.selected_audio is None:
             return None
         return os.path.join(abs_path(CFG.audio_folder), self.selected_audio)
 
     # ------------------------------------------------------------------
     def update_signals(self, signals: dict):
-        """Empuja nuevas muestras a los sparklines de PPG/GSR conocidas."""
+        """Actualiza los sparklines de los widgets de senales conocidas (PPG, GSR, etc.).
+
+        Args:
+            signals: Diccionario {clave: valor_float} con las ultimas lecturas del sensor.
+        """
         for key, widget in self.signal_widgets.items():
             widget.update(signals.get(key))
 
     def set_countdown(self, label, remaining):
+        """Establece o limpia el overlay de cuenta regresiva.
+
+        Args:
+            label: Texto a mostrar (ej. 'Preparando...'). Pasa None para ocultar el overlay.
+            remaining: Segundos restantes de la cuenta regresiva.
+        """
         self.countdown = {"label": label, "remaining": remaining} if label else None
 
     def set_session_active(self, active: bool):
+        """Actualiza el estado de sesion activa, habilitando o deshabilitando controles.
+
+        Args:
+            active: True si hay una sesion en curso; False en caso contrario.
+        """
         self.session_active = active
 
     def open_session_modal(self):
+        """Abre el dialogo modal para ingresar el nombre del participante."""
         self.modal = {"mode": "session", "text": ""}
 
     def open_quit_confirm(self):
+        """Abre el dialogo de confirmacion para salir con una sesion activa."""
         self.modal = {
             "mode": "confirm",
             "message": "Hay una sesion activa. Salir de todos modos?",
@@ -216,7 +320,11 @@ class AppUI:
 
     # ------------------------------------------------------------------
     def handle_event(self, event):
-        """Procesa un evento pygame. Puede establecer self.action."""
+        """Procesa un evento pygame y puede establecer self.action como efecto secundario.
+
+        Args:
+            event: Evento pygame (KEYDOWN, MOUSEBUTTONDOWN, MOUSEWHEEL, etc.).
+        """
         if self.modal is not None:
             self._handle_modal_event(event)
             return
@@ -265,11 +373,21 @@ class AppUI:
         self._handle_session_buttons(pos)
 
     def _cycle_camera_profile(self, step):
+        """Avanza o retrocede el perfil de camara activo en la lista de perfiles.
+
+        Args:
+            step: 1 para avanzar al siguiente perfil, -1 para retroceder al anterior.
+        """
         idx = self.camera_profiles.index(self.camera_profile)
         idx = (idx + step) % len(self.camera_profiles)
         self.camera_profile = self.camera_profiles[idx]
 
     def _handle_session_buttons(self, pos):
+        """Procesa clics en los botones REPRODUCIR y ABORTAR.
+
+        Args:
+            pos: Tupla (x, y) de la posicion del clic del raton.
+        """
         play_rect = self.rects.get("play_btn")
         abort_rect = self.rects.get("abort_btn")
         if play_rect and play_rect.collidepoint(pos) and self._play_enabled():
@@ -278,9 +396,19 @@ class AppUI:
             self.action = ("ABORT",)
 
     def _play_enabled(self):
+        """Indica si el boton REPRODUCIR debe estar habilitado.
+
+        Returns:
+            True si hay un audio seleccionado y no hay ninguna sesion activa.
+        """
         return self.selected_audio is not None and not self.session_active
 
     def _handle_modal_event(self, event):
+        """Procesa eventos de teclado y raton cuando hay un dialogo modal abierto.
+
+        Args:
+            event: Evento pygame a procesar.
+        """
         mode = self.modal["mode"]
         if event.type == pygame.KEYDOWN:
             if mode == "session":
@@ -323,9 +451,16 @@ class AppUI:
 
     # ------------------------------------------------------------------
     def render(self, W, H, ctx: dict) -> pygame.Surface:
-        """Construye la superficie HUD completa para esta frame.
+        """Construye la superficie HUD completa para el frame actual.
 
-        ctx: {connected, port, baud, rate_hz, euler, signals, using_placeholder}
+        Args:
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+            ctx: Diccionario con el estado de la app: {connected, port, baud,
+                rate_hz, signals, using_placeholder}.
+
+        Returns:
+            Superficie pygame SRCALPHA con el HUD renderizado, lista para subir como textura.
         """
         surf = pygame.Surface((W, H), pygame.SRCALPHA)
         self.rects = {}
@@ -344,6 +479,13 @@ class AppUI:
         return surf
 
     def _draw_signal_panel(self, surf, W, signals):
+        """Dibuja los widgets de senales principales (PPG, GSR) en la esquina superior derecha.
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            signals: Diccionario {clave: valor} con las lecturas actuales de las senales.
+        """
         x = W - 230
         y = 20
         for key, widget in self.signal_widgets.items():
@@ -352,6 +494,14 @@ class AppUI:
             y += 90
 
     def _draw_side_panel(self, surf, W, H, ctx):
+        """Dibuja el panel lateral con lista de audios, senales adicionales y selector de camara.
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+            ctx: Diccionario de contexto de la app (usado para 'signals').
+        """
         toggle_rect = pygame.Rect(0, H // 2 - 20, 24, 40)
         self.rects["panel_toggle"] = toggle_rect
         pygame.draw.rect(surf, (40, 44, 60, 220), toggle_rect, border_radius=4)
@@ -450,6 +600,13 @@ class AppUI:
         surf.blit(panel, (toggle_rect.width, 0))
 
     def _draw_session_controls(self, surf, W, H):
+        """Dibuja los botones REPRODUCIR y ABORTAR en la parte inferior de la ventana.
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+        """
         btn_w, btn_h = 180, 44
         gap = 20
         total_w = btn_w * 2 + gap
@@ -477,6 +634,15 @@ class AppUI:
         surf.blit(abort_label, abort_text_rect)
 
     def _draw_status_bar(self, surf, W, H, ctx):
+        """Dibuja la barra de estado inferior con puerto, baudrate, Hz y camara activa.
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+            ctx: Diccionario de contexto con 'connected', 'port', 'baud', 'rate_hz',
+                'using_placeholder'.
+        """
         bar_rect = pygame.Rect(0, H - STATUS_BAR_HEIGHT, W, STATUS_BAR_HEIGHT)
         pygame.draw.rect(surf, (10, 12, 20, 200), bar_rect)
 
@@ -493,6 +659,13 @@ class AppUI:
         surf.blit(label, (28, bar_rect.y + 2))
 
     def _draw_countdown(self, surf, W, H):
+        """Dibuja el overlay de cuenta regresiva centrado en la ventana.
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+        """
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((10, 12, 20, 140))
         surf.blit(overlay, (0, 0))
@@ -505,6 +678,13 @@ class AppUI:
         surf.blit(label_surf, label_surf.get_rect(center=(W // 2, H // 2 + 70)))
 
     def _draw_modal(self, surf, W, H):
+        """Dibuja el dialogo modal activo (ingreso de nombre o confirmacion de salida).
+
+        Args:
+            surf: Superficie destino.
+            W: Ancho de la ventana en pixeles.
+            H: Alto de la ventana en pixeles.
+        """
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((5, 6, 12, 180))
         surf.blit(overlay, (0, 0))

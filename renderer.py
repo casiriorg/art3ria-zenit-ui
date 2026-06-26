@@ -21,7 +21,15 @@ PLACEHOLDER_HEADER = (
 
 # ---------------- Quaternion math ----------------
 def quat_mul(a, b):
-    """Producto de Hamilton de dos quaterniones (w,x,y,z)."""
+    """Calcula el producto de Hamilton de dos quaterniones (w, x, y, z).
+
+    Args:
+        a: Quaternion (w, x, y, z).
+        b: Quaternion (w, x, y, z).
+
+    Returns:
+        Quaternion resultante (w, x, y, z).
+    """
     aw, ax, ay, az = a
     bw, bx, by, bz = b
     return (
@@ -33,13 +41,27 @@ def quat_mul(a, b):
 
 
 def quat_conj(q):
-    """Conjugado del quaternion (w,x,y,z)."""
+    """Devuelve el conjugado del quaternion (w, x, y, z).
+
+    Args:
+        q: Quaternion (w, x, y, z).
+
+    Returns:
+        Quaternion conjugado (w, -x, -y, -z).
+    """
     w, x, y, z = q
     return (w, -x, -y, -z)
 
 
 def quat_to_matrix(q):
-    """Convierte quaternion (w,x,y,z) a matriz 4x4 column-major para OpenGL."""
+    """Convierte un quaternion a matriz de rotacion 4x4 column-major para OpenGL.
+
+    Args:
+        q: Quaternion (w, x, y, z).
+
+    Returns:
+        Lista de 16 floats en orden column-major, lista para pasar a glMultMatrixf.
+    """
     w, x, y, z = q
     xx, yy, zz = x*x, y*y, z*z
     xy, xz, yz = x*y, x*z, y*z
@@ -54,7 +76,17 @@ def quat_to_matrix(q):
 
 
 def quat_to_euler(q):
-    """Convierte quaternion a (roll, pitch, yaw) en grados, solo para visualizacion."""
+    """Convierte un quaternion a angulos Euler (roll, pitch, yaw) en grados.
+
+    Solo para visualizacion en el HUD; el render 3D trabaja directamente
+    con quaterniones para evitar gimbal lock.
+
+    Args:
+        q: Quaternion (w, x, y, z).
+
+    Returns:
+        Tupla (roll, pitch, yaw) en grados.
+    """
     w, x, y, z = q
     sinr_cosp = 2 * (w*x + y*z)
     cosr_cosp = 1 - 2 * (x*x + y*y)
@@ -74,7 +106,18 @@ def quat_to_euler(q):
 
 
 def euler_to_quat(pitch_deg, yaw_deg, roll_deg):
-    """Construye un quaternion (w,x,y,z) a partir de angulos Euler en grados."""
+    """Construye un quaternion (w, x, y, z) a partir de angulos Euler en grados.
+
+    Convencion de orden: ZYX (yaw -> pitch -> roll).
+
+    Args:
+        pitch_deg: Angulo de pitch en grados.
+        yaw_deg: Angulo de yaw en grados.
+        roll_deg: Angulo de roll en grados.
+
+    Returns:
+        Quaternion normalizado (w, x, y, z).
+    """
     pitch, yaw, roll = (math.radians(a) for a in (pitch_deg, yaw_deg, roll_deg))
 
     cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
@@ -90,7 +133,16 @@ def euler_to_quat(pitch_deg, yaw_deg, roll_deg):
 
 
 def apply_camera_profile(q, profile: dict):
-    """Aplica los signos de eje y el offset angular de un perfil de camara al quaternion."""
+    """Aplica los signos de eje y el offset angular del perfil de camara al quaternion.
+
+    Args:
+        q: Quaternion de orientacion relativa (w, x, y, z).
+        profile: Diccionario de perfil con claves 'roll_sign', 'pitch_sign',
+            'yaw_sign' (cada uno ±1) y 'offset_deg' ([pitch, yaw, roll]).
+
+    Returns:
+        Quaternion transformado (w, x, y, z) listo para pasar a glMultMatrixf.
+    """
     w, x, y, z = q
     signed = (
         w,
@@ -105,7 +157,14 @@ def apply_camera_profile(q, profile: dict):
 
 # ---------------- Placeholder OBJ ----------------
 def ensure_placeholder_obj(path: str = None):
-    """Genera un cubo OBJ placeholder (1.2x0.7x0.15) si no existe el archivo del modelo."""
+    """Genera un cubo OBJ placeholder si el archivo del modelo no existe.
+
+    El cubo mide 1.2 x 0.7 x 0.15 unidades (proporciones aproximadas de una
+    cabeza). No hace nada si el archivo ya existe.
+
+    Args:
+        path: Ruta absoluta al archivo OBJ. Si es None, usa CFG.model_path.
+    """
     path = path or abs_path(CFG.model_path)
     if os.path.exists(path):
         return
@@ -146,6 +205,11 @@ class ObjModel:
     """Carga un modelo OBJ (v/vn/f) con fallback al cubo hardcoded del script base."""
 
     def __init__(self, path: str = None):
+        """Carga el modelo OBJ desde `path` y compila la display list de OpenGL.
+
+        Args:
+            path: Ruta absoluta al archivo OBJ. Si es None, usa CFG.model_path.
+        """
         self.path = path or abs_path(CFG.model_path)
         self.vertices = []
         self.normals = []
@@ -156,7 +220,11 @@ class ObjModel:
         self.load(self.path)
 
     def load(self, path: str):
-        """Intenta cargar el OBJ indicado. En caso de error, usa el cubo hardcoded."""
+        """Carga el OBJ indicado. En caso de error usa el cubo hardcoded como fallback.
+
+        Args:
+            path: Ruta absoluta al archivo OBJ a cargar.
+        """
         try:
             self._load_obj(path)
             self.using_placeholder = self._is_placeholder_file(path)
@@ -169,6 +237,14 @@ class ObjModel:
 
     @staticmethod
     def _is_placeholder_file(path: str) -> bool:
+        """Comprueba si el OBJ en `path` es el placeholder generado automaticamente.
+
+        Args:
+            path: Ruta al archivo OBJ.
+
+        Returns:
+            True si la primera linea contiene 'PLACEHOLDER'; False en caso contrario o error.
+        """
         try:
             with open(path, "r", encoding="utf-8") as f:
                 first_line = f.readline()
@@ -177,6 +253,18 @@ class ObjModel:
             return False
 
     def _load_obj(self, path: str):
+        """Parsea el archivo OBJ y llena self.vertices, self.normals y self.faces.
+
+        Autocentra la geometria al centro del bounding box y aplica
+        model_pivot_offset de la configuracion.
+
+        Args:
+            path: Ruta absoluta al archivo OBJ.
+
+        Raises:
+            ValueError: Si el archivo no contiene vertices o caras validos.
+            OSError: Si el archivo no puede abrirse.
+        """
         vertices = []
         normals = []
         faces = []
@@ -222,6 +310,7 @@ class ObjModel:
         self.faces = faces
 
     def _load_fallback_cube(self):
+        """Carga un cubo hardcoded como fallback cuando el OBJ no puede leerse."""
         w, h, d = 1.2, 0.7, 0.15
         self.vertices = [
             (-w, -h, -d), (w, -h, -d), (w, h, -d), (-w, h, -d),
@@ -240,8 +329,11 @@ class ObjModel:
         self.faces = [(f[0], f[1]) for f in self._cube_faces]
 
     def _build_display_list(self):
-        """Compila la geometria en una display list para evitar miles de llamadas
-        glBegin/glVertex3f por frame (el costo dominante en PyOpenGL legacy)."""
+        """Compila la geometria en una display list de OpenGL para render eficiente.
+
+        Evita miles de llamadas glBegin/glVertex3f por frame, que son el costo
+        dominante en el pipeline legacy de PyOpenGL.
+        """
         if self._display_list is not None:
             glDeleteLists(self._display_list, 1)
 
@@ -258,12 +350,13 @@ class ObjModel:
         glCallList(self._display_list)
 
     def destroy(self):
-        """Libera la display list de OpenGL."""
+        """Libera la display list de OpenGL asociada al modelo."""
         if self._display_list is not None:
             glDeleteLists(self._display_list, 1)
             self._display_list = None
 
     def _draw_model(self):
+        """Emite las llamadas glBegin/glVertex3f para cada cara del modelo OBJ cargado."""
         for idx, nidx in self.faces:
             if nidx is not None and 0 <= nidx < len(self.normals):
                 nx, ny, nz = self.normals[nidx]
@@ -277,6 +370,7 @@ class ObjModel:
             glEnd()
 
     def _draw_fallback_cube(self):
+        """Dibuja el cubo hardcoded con colores por cara y aristas negras."""
         glBegin(GL_QUADS)
         for idx, _nidx, color in self._cube_faces:
             glColor3f(*color)
@@ -299,7 +393,7 @@ class ObjModel:
 
 
 def draw_axes():
-    """Dibuja los ejes de referencia X (rojo), Y (verde), Z (azul)."""
+    """Dibuja los ejes de referencia: X en rojo, Y en verde, Z en azul."""
     glLineWidth(2.0)
     glBegin(GL_LINES)
     glColor3f(0.9, 0.3, 0.3); glVertex3f(0, 0, 0); glVertex3f(2.2, 0, 0)
