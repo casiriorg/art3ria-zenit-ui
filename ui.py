@@ -7,13 +7,8 @@ import pygame
 
 from config import CFG, abs_path
 
-# Cuentas regresivas / countdown overlay
 COUNTDOWN_FONT_SIZE = 140
-
-# Barra de estado inferior
 STATUS_BAR_HEIGHT = 24
-
-# Color de acento para el modo replay
 REPLAY_ACCENT = (130, 80, 200)
 
 
@@ -207,10 +202,18 @@ class AppUI:
         self.fonts = self._load_fonts()
 
         self.panel_expanded = True
+
+        # Estado del panel lateral: "audio" muestra WAVs, "logs" muestra CSVs de sesion
+        self.panel_mode: str = "audio"
+
         self.audio_files = []
         self.audio_scroll = 0
         self.selected_audio = None
         self.refresh_audio_files()
+
+        self.log_files = []
+        self.log_scroll = 0
+        self.refresh_log_files()
 
         self.camera_profiles = list(CFG.camera_profiles.keys())
         self.camera_profile = CFG.active_camera_profile
@@ -229,11 +232,6 @@ class AppUI:
         self.modal = None
         self.rects = {}
 
-        # Estado de replay
-        self.log_files: list = []
-        self.log_scroll: int = 0
-        self.selected_log: str | None = None
-        self.refresh_log_files()
         self._replay_mode: bool = False
         self._replay_ref = None
         self._normal_accent = None
@@ -281,8 +279,7 @@ class AppUI:
     def refresh_log_files(self):
         """Reescanea CFG.logs_folder buscando archivos .csv y actualiza la lista de logs.
 
-        Ordena de mas reciente a mas antiguo. Reinicia el scroll y limpia la seleccion
-        si el archivo ya no existe.
+        Ordena de mas reciente a mas antiguo y reinicia el scroll.
         """
         folder = abs_path(CFG.logs_folder)
         os.makedirs(folder, exist_ok=True)
@@ -290,8 +287,6 @@ class AppUI:
             (f for f in os.listdir(folder) if f.lower().endswith(".csv")),
             reverse=True,
         )
-        if self.selected_log not in self.log_files:
-            self.selected_log = None
         self.log_scroll = 0
 
     def selected_audio_path(self):
@@ -343,11 +338,6 @@ class AppUI:
             "on_yes": "QUIT",
         }
 
-    def open_log_select_modal(self):
-        """Refresca la lista de logs y abre el modal de seleccion de sesion para replay."""
-        self.refresh_log_files()
-        self.modal = {"mode": "log_select"}
-
     def show_summary(self, summary: dict):
         """Abre el modal de resumen con las estadisticas de la sesion recien finalizada.
 
@@ -359,8 +349,9 @@ class AppUI:
     def set_replay_mode(self, active: bool, replay_ref=None):
         """Activa o desactiva el modo replay, cambiando el color de acento de la interfaz.
 
-        En modo replay el acento cambia a purpura (REPLAY_ACCENT) y los controles de
-        sesion se reemplazan por controles de transporte.
+        Al entrar en replay el panel cambia a modo 'logs' para que el usuario pueda
+        seleccionar otra sesion sin salir. Al salir conserva el modo 'logs' por la
+        misma razon.
 
         Args:
             active: True para entrar en modo replay, False para salir.
@@ -371,7 +362,7 @@ class AppUI:
             self.colors["accent"] = REPLAY_ACCENT
             self._replay_mode = True
             self._replay_ref = replay_ref
-            self.selected_log = None
+            self.panel_mode = "logs"
         else:
             if self._normal_accent is not None:
                 self.colors["accent"] = self._normal_accent
@@ -395,9 +386,14 @@ class AppUI:
             return
 
         if event.type == pygame.MOUSEWHEEL:
-            if self.rects.get("audio_list") and \
-                    self.rects["audio_list"].collidepoint(pygame.mouse.get_pos()):
-                self.audio_scroll = max(0, self.audio_scroll - event.y)
+            mouse_pos = pygame.mouse.get_pos()
+            if self.panel_mode == "logs":
+                if self.rects.get("log_list") and self.rects["log_list"].collidepoint(mouse_pos):
+                    max_scroll = max(0, len(self.log_files) - (180 // 26))
+                    self.log_scroll = max(0, min(max_scroll, self.log_scroll - event.y))
+            else:
+                if self.rects.get("audio_list") and self.rects["audio_list"].collidepoint(mouse_pos):
+                    self.audio_scroll = max(0, self.audio_scroll - event.y)
             return
 
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
@@ -427,16 +423,29 @@ class AppUI:
             self._handle_session_buttons(pos)
             return
 
-        for i, item_rect in enumerate(self.rects.get("audio_items", [])):
-            if item_rect.collidepoint(pos):
-                idx = i + self.audio_scroll
-                if 0 <= idx < len(self.audio_files):
-                    self.selected_audio = self.audio_files[idx]
+        # Lista de logs (panel_mode == "logs")
+        if self.panel_mode == "logs":
+            for i, item_rect in enumerate(self.rects.get("log_items", [])):
+                if item_rect.collidepoint(pos):
+                    idx = i + self.log_scroll
+                    if 0 <= idx < len(self.log_files):
+                        self.action = ("START_REPLAY", self.log_files[idx])
+                    return
+            if self.rects.get("refresh_btn") and self.rects["refresh_btn"].collidepoint(pos):
+                self.refresh_log_files()
                 return
 
-        if self.rects.get("refresh_btn") and self.rects["refresh_btn"].collidepoint(pos):
-            self.refresh_audio_files()
-            return
+        # Lista de audios (panel_mode == "audio")
+        if self.panel_mode == "audio":
+            for i, item_rect in enumerate(self.rects.get("audio_items", [])):
+                if item_rect.collidepoint(pos):
+                    idx = i + self.audio_scroll
+                    if 0 <= idx < len(self.audio_files):
+                        self.selected_audio = self.audio_files[idx]
+                    return
+            if self.rects.get("refresh_btn") and self.rects["refresh_btn"].collidepoint(pos):
+                self.refresh_audio_files()
+                return
 
         if self.rects.get("cam_prev") and self.rects["cam_prev"].collidepoint(pos):
             self._cycle_camera_profile(-1)
@@ -448,8 +457,11 @@ class AppUI:
         if self.rects.get("replay_btn") and self.rects["replay_btn"].collidepoint(pos):
             if self._replay_mode:
                 self.action = ("EXIT_REPLAY",)
+            elif self.panel_mode == "logs":
+                self.panel_mode = "audio"
             else:
-                self.open_log_select_modal()
+                self.refresh_log_files()
+                self.panel_mode = "logs"
             return
 
         self._handle_session_buttons(pos)
@@ -493,23 +505,9 @@ class AppUI:
         """
         mode = self.modal["mode"]
 
-        # Scroll de la lista de logs con la rueda del raton
-        if event.type == pygame.MOUSEWHEEL:
-            if mode == "log_select":
-                max_scroll = max(0, len(self.log_files) - (160 // 26))
-                self.log_scroll = max(0, min(max_scroll, self.log_scroll - event.y))
-            return
-
         if event.type == pygame.KEYDOWN:
             if mode == "summary":
                 if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
-                    self.modal = None
-                return
-            if mode == "log_select":
-                if event.key == pygame.K_ESCAPE:
-                    self.modal = None
-                elif event.key == pygame.K_RETURN and self.selected_log:
-                    self.action = ("START_REPLAY", self.selected_log)
                     self.modal = None
                 return
             if mode == "session":
@@ -537,20 +535,6 @@ class AppUI:
             pos = event.pos
             if mode == "summary":
                 if self.rects.get("modal_confirm") and self.rects["modal_confirm"].collidepoint(pos):
-                    self.modal = None
-                return
-            if mode == "log_select":
-                for i, item_rect in enumerate(self.rects.get("log_items", [])):
-                    if item_rect.collidepoint(pos):
-                        idx = i + self.log_scroll
-                        if 0 <= idx < len(self.log_files):
-                            self.selected_log = self.log_files[idx]
-                        return
-                if self.rects.get("modal_confirm") and self.rects["modal_confirm"].collidepoint(pos):
-                    if self.selected_log:
-                        self.action = ("START_REPLAY", self.selected_log)
-                        self.modal = None
-                elif self.rects.get("modal_cancel") and self.rects["modal_cancel"].collidepoint(pos):
                     self.modal = None
                 return
             if mode == "session":
@@ -613,7 +597,10 @@ class AppUI:
             y += 90
 
     def _draw_side_panel(self, surf, W, H, ctx):
-        """Dibuja el panel lateral con lista de audios, senales adicionales, camara y replay.
+        """Dibuja el panel lateral con lista de audios o logs, senales adicionales y camara.
+
+        El contenido de la lista superior cambia segun panel_mode: 'audio' muestra
+        archivos WAV para sesiones nuevas; 'logs' muestra CSVs para replay.
 
         Args:
             surf: Superficie destino.
@@ -637,35 +624,82 @@ class AppUI:
 
         pad = 16
         y = pad
-
-        title = self.fonts["title"].render("Audio (WAV)", True, self.colors["text"])
-        panel.blit(title, (pad, y))
-        y += 36
-
         list_height = 180
-        list_rect = pygame.Rect(pad, y, panel_w - 2 * pad, list_height)
-        self.rects["audio_list"] = list_rect.move(toggle_rect.width, 0)
-        pygame.draw.rect(panel, (10, 12, 20, 180), list_rect, border_radius=6)
-
         item_h = 26
         visible = list_height // item_h
-        item_rects = []
-        for i in range(visible):
-            idx = i + self.audio_scroll
-            if idx >= len(self.audio_files):
-                break
-            item_rect = pygame.Rect(list_rect.x + 2, list_rect.y + 2 + i * item_h,
-                                     list_rect.width - 4, item_h - 2)
-            name = self.audio_files[idx]
-            if name == self.selected_audio:
-                pygame.draw.rect(panel, self.colors["accent"], item_rect, border_radius=4)
-                txt_color = (10, 10, 10)
+
+        # ---- Lista superior: audio o logs segun panel_mode ----
+        if self.panel_mode == "logs":
+            title_color = REPLAY_ACCENT
+            title_text = "Sesiones grabadas"
+            title = self.fonts["title"].render(title_text, True, title_color)
+            panel.blit(title, (pad, y))
+            y += 36
+
+            list_rect = pygame.Rect(pad, y, panel_w - 2 * pad, list_height)
+            pygame.draw.rect(panel, (10, 8, 18, 180), list_rect, border_radius=6)
+            self.rects["log_list"] = list_rect.move(toggle_rect.width, 0)
+
+            item_rects = []
+            if not self.log_files:
+                no_lbl = self.fonts["small"].render(
+                    "(no hay sesiones en logs/)", True, (130, 110, 150)
+                )
+                panel.blit(no_lbl, (list_rect.x + 8, list_rect.y + 10))
             else:
-                txt_color = self.colors["text"]
-            label = self.fonts["small"].render(name, True, txt_color)
-            panel.blit(label, (item_rect.x + 6, item_rect.y + 4))
-            item_rects.append(item_rect.move(toggle_rect.width, 0))
-        self.rects["audio_items"] = item_rects
+                for i in range(visible):
+                    idx = i + self.log_scroll
+                    if idx >= len(self.log_files):
+                        break
+                    item_rect = pygame.Rect(
+                        list_rect.x + 2, list_rect.y + 2 + i * item_h,
+                        list_rect.width - 4, item_h - 2,
+                    )
+                    name = self.log_files[idx]
+                    # Resaltar la sesion que se esta reproduciendo actualmente
+                    is_active = (
+                        self._replay_mode and self._replay_ref is not None
+                        and self._replay_ref.port == name
+                    )
+                    if is_active:
+                        pygame.draw.rect(panel, REPLAY_ACCENT, item_rect, border_radius=4)
+                        txt_color = (15, 10, 25)
+                    else:
+                        txt_color = (200, 185, 220)
+                    lbl = self.fonts["small"].render(name, True, txt_color)
+                    panel.blit(lbl, (item_rect.x + 6, item_rect.y + 4))
+                    item_rects.append(item_rect.move(toggle_rect.width, 0))
+            self.rects["log_items"] = item_rects
+
+        else:  # panel_mode == "audio"
+            title = self.fonts["title"].render("Audio (WAV)", True, self.colors["text"])
+            panel.blit(title, (pad, y))
+            y += 36
+
+            list_rect = pygame.Rect(pad, y, panel_w - 2 * pad, list_height)
+            self.rects["audio_list"] = list_rect.move(toggle_rect.width, 0)
+            pygame.draw.rect(panel, (10, 12, 20, 180), list_rect, border_radius=6)
+
+            item_rects = []
+            for i in range(visible):
+                idx = i + self.audio_scroll
+                if idx >= len(self.audio_files):
+                    break
+                item_rect = pygame.Rect(
+                    list_rect.x + 2, list_rect.y + 2 + i * item_h,
+                    list_rect.width - 4, item_h - 2,
+                )
+                name = self.audio_files[idx]
+                if name == self.selected_audio:
+                    pygame.draw.rect(panel, self.colors["accent"], item_rect, border_radius=4)
+                    txt_color = (10, 10, 10)
+                else:
+                    txt_color = self.colors["text"]
+                label = self.fonts["small"].render(name, True, txt_color)
+                panel.blit(label, (item_rect.x + 6, item_rect.y + 4))
+                item_rects.append(item_rect.move(toggle_rect.width, 0))
+            self.rects["audio_items"] = item_rects
+
         y += list_height + 10
 
         refresh_rect = pygame.Rect(pad, y, panel_w - 2 * pad, 30)
@@ -673,8 +707,31 @@ class AppUI:
         refresh_label = self.fonts["label"].render("Refrescar", True, self.colors["text"])
         panel.blit(refresh_label, (refresh_rect.x + 10, refresh_rect.y + 5))
         self.rects["refresh_btn"] = refresh_rect.move(toggle_rect.width, 0)
+        y += 30 + 8
+
+        # ---- Boton de replay / volver ----
+        replay_btn_rect = pygame.Rect(pad, y, panel_w - 2 * pad, 30)
+        if self._replay_mode:
+            btn_bg = (60, 30, 30, 220)
+            btn_text = "Salir del Replay"
+            btn_fg = (220, 90, 90)
+        elif self.panel_mode == "logs":
+            btn_bg = (30, 35, 50, 220)
+            btn_text = "← Volver a Audio"
+            btn_fg = (170, 175, 185)
+        else:
+            btn_bg = (40, 44, 60, 220)
+            btn_text = "Abrir Replay →"
+            btn_fg = REPLAY_ACCENT
+
+        pygame.draw.rect(panel, btn_bg, replay_btn_rect, border_radius=6)
+        pygame.draw.rect(panel, REPLAY_ACCENT, replay_btn_rect, 1, border_radius=6)
+        replay_label = self.fonts["label"].render(btn_text, True, btn_fg)
+        panel.blit(replay_label, (replay_btn_rect.x + 10, replay_btn_rect.y + 6))
+        self.rects["replay_btn"] = replay_btn_rect.move(toggle_rect.width, 0)
         y += 30 + 14
 
+        # ---- Senales adicionales ----
         pygame.draw.line(panel, (80, 84, 100), (pad, y), (panel_w - pad, y), 1)
         y += 16
 
@@ -695,6 +752,7 @@ class AppUI:
             panel.blit(line, (pad, y))
             y += 22
 
+        # ---- Perfil de camara ----
         y += 10
         pygame.draw.line(panel, (80, 84, 100), (pad, y), (panel_w - pad, y), 1)
         y += 16
@@ -712,23 +770,11 @@ class AppUI:
         self.rects["cam_prev"] = prev_rect.move(toggle_rect.width, 0)
         self.rects["cam_next"] = next_rect.move(toggle_rect.width, 0)
 
-        name_label = self.fonts["label"].render(f"[ {self.camera_profile} ]", True, self.colors["accent"])
+        name_label = self.fonts["label"].render(
+            f"[ {self.camera_profile} ]", True, self.colors["accent"]
+        )
         name_rect = name_label.get_rect(center=(panel_w // 2, y + 14))
         panel.blit(name_label, name_rect)
-        y += 40
-
-        # ---- Seccion Replay ----
-        pygame.draw.line(panel, (80, 84, 100), (pad, y), (panel_w - pad, y), 1)
-        y += 14
-
-        replay_btn_rect = pygame.Rect(pad, y, panel_w - 2 * pad, 30)
-        btn_color = (60, 30, 80, 220) if self._replay_mode else (40, 44, 60, 220)
-        pygame.draw.rect(panel, btn_color, replay_btn_rect, border_radius=6)
-        pygame.draw.rect(panel, REPLAY_ACCENT, replay_btn_rect, 1, border_radius=6)
-        replay_btn_text = "Salir del Replay" if self._replay_mode else "Abrir Replay..."
-        replay_label = self.fonts["label"].render(replay_btn_text, True, REPLAY_ACCENT)
-        panel.blit(replay_label, (replay_btn_rect.x + 10, replay_btn_rect.y + 6))
-        self.rects["replay_btn"] = replay_btn_rect.move(toggle_rect.width, 0)
 
         surf.blit(panel, (toggle_rect.width, 0))
 
@@ -789,18 +835,14 @@ class AppUI:
         rr = self._replay_ref
         bar_h = 56
         by = H - STATUS_BAR_HEIGHT - bar_h - 8
-        pad_x = 20
 
-        # Fondo semitransparente
-        bg_rect = pygame.Rect(0, by, W, bar_h + 8)
-        bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+        bg_surf = pygame.Surface((W, bar_h + 8), pygame.SRCALPHA)
         bg_surf.fill((10, 12, 20, 160))
-        surf.blit(bg_surf, bg_rect.topleft)
+        surf.blit(bg_surf, (0, by))
 
         cy = by + bar_h // 2
 
-        # Boton play / pausa
-        pp_rect = pygame.Rect(pad_x, by + 8, 44, 40)
+        pp_rect = pygame.Rect(20, by + 8, 44, 40)
         pygame.draw.rect(surf, (50, 40, 70, 240), pp_rect, border_radius=8)
         pygame.draw.rect(surf, REPLAY_ACCENT, pp_rect, 1, border_radius=8)
         if rr.playing:
@@ -810,21 +852,18 @@ class AppUI:
             _draw_triangle_icon(surf, pp_rect.center, 18, REPLAY_ACCENT)
         self.rects["rp_play"] = pp_rect
 
-        # Botones de velocidad
         speeds = [("0.5x", 0.5), ("1x", 1.0), ("2x", 2.0)]
         sx = pp_rect.right + 14
         for spd_label, spd_val in speeds:
             sr = pygame.Rect(sx, by + 13, 44, 30)
             active = abs(rr.speed - spd_val) < 0.01
-            bg = REPLAY_ACCENT if active else (40, 34, 56, 220)
-            pygame.draw.rect(surf, bg, sr, border_radius=6)
+            pygame.draw.rect(surf, REPLAY_ACCENT if active else (40, 34, 56, 220), sr, border_radius=6)
             txt_color = (15, 10, 25) if active else (170, 150, 200)
             spd_surf = self.fonts["small"].render(spd_label, True, txt_color)
             surf.blit(spd_surf, spd_surf.get_rect(center=sr.center))
             self.rects[f"rp_spd_{spd_val}"] = sr
             sx += 52
 
-        # Barra de progreso
         exit_w = 90
         prog_x = sx + 10
         prog_w = W - prog_x - exit_w - 16
@@ -838,7 +877,6 @@ class AppUI:
                          pygame.Rect(prog_track.x, prog_track.y, fill_w, prog_track.height),
                          border_radius=4)
 
-        # Etiqueta de tiempo
         def fmt_t(s):
             """Formatea segundos a M:SS."""
             return f"{int(s) // 60}:{int(s) % 60:02d}"
@@ -848,7 +886,6 @@ class AppUI:
         )
         surf.blit(time_lbl, (prog_track.x, prog_track.bottom + 4))
 
-        # Boton salir
         exit_rect = pygame.Rect(W - exit_w - 10, by + 8, exit_w, 40)
         pygame.draw.rect(surf, (60, 30, 30, 220), exit_rect, border_radius=8)
         exit_lbl = self.fonts["label"].render("Salir", True, (220, 90, 90))
@@ -915,9 +952,7 @@ class AppUI:
         surf.blit(label_surf, label_surf.get_rect(center=(W // 2, H // 2 + 70)))
 
     def _draw_modal(self, surf, W, H):
-        """Dibuja el dialogo modal activo segun su modo.
-
-        Modos soportados: 'session', 'confirm', 'summary', 'log_select'.
+        """Dibuja el dialogo modal activo (ingreso de nombre, confirmacion o resumen).
 
         Args:
             surf: Superficie destino.
@@ -930,10 +965,6 @@ class AppUI:
 
         if self.modal["mode"] == "summary":
             self._draw_summary_content(surf, W, H)
-            return
-
-        if self.modal["mode"] == "log_select":
-            self._draw_log_select_modal(surf, W, H)
             return
 
         box_w, box_h = 420, 180
@@ -966,93 +997,6 @@ class AppUI:
         cancel_label = self.fonts["label"].render("Cancelar", True, self.colors["text"])
         surf.blit(confirm_label, confirm_label.get_rect(center=confirm_rect.center))
         surf.blit(cancel_label, cancel_label.get_rect(center=cancel_rect.center))
-
-        self.rects["modal_confirm"] = confirm_rect
-        self.rects["modal_cancel"] = cancel_rect
-
-    def _draw_log_select_modal(self, surf, W, H):
-        """Dibuja el modal de seleccion de archivo CSV para iniciar un replay.
-
-        Muestra una lista scrollable de sesiones grabadas en logs/ con botones
-        de confirmacion y cancelacion.
-
-        Args:
-            surf: Superficie destino.
-            W: Ancho de la ventana en pixeles.
-            H: Alto de la ventana en pixeles.
-        """
-        box_w, box_h = 500, 310
-        box_rect = pygame.Rect((W - box_w) // 2, (H - box_h) // 2, box_w, box_h)
-        pygame.draw.rect(surf, (20, 14, 32, 255), box_rect, border_radius=10)
-        pygame.draw.rect(surf, REPLAY_ACCENT, box_rect, 2, border_radius=10)
-
-        pad = 20
-        y = box_rect.y + pad
-
-        title = self.fonts["title"].render("Seleccionar sesion para replay", True, REPLAY_ACCENT)
-        surf.blit(title, (box_rect.x + pad, y))
-        y += 30
-        pygame.draw.line(surf, (80, 60, 100),
-                         (box_rect.x + pad, y), (box_rect.right - pad, y), 1)
-        y += 12
-
-        # Lista de logs
-        list_height = 160
-        list_rect = pygame.Rect(box_rect.x + pad, y, box_w - 2 * pad, list_height)
-        pygame.draw.rect(surf, (10, 8, 18, 220), list_rect, border_radius=6)
-        self.rects["log_list"] = list_rect
-
-        item_h = 26
-        visible = list_height // item_h
-        item_rects = []
-
-        if not self.log_files:
-            no_lbl = self.fonts["small"].render(
-                "(no hay sesiones en logs/)", True, (130, 110, 150)
-            )
-            surf.blit(no_lbl, (list_rect.x + 12, list_rect.y + 12))
-        else:
-            for i in range(visible):
-                idx = i + self.log_scroll
-                if idx >= len(self.log_files):
-                    break
-                item_rect = pygame.Rect(
-                    list_rect.x + 2, list_rect.y + 2 + i * item_h,
-                    list_rect.width - 4, item_h - 2,
-                )
-                name = self.log_files[idx]
-                if name == self.selected_log:
-                    pygame.draw.rect(surf, REPLAY_ACCENT, item_rect, border_radius=4)
-                    txt_color = (15, 10, 25)
-                else:
-                    txt_color = (200, 185, 220)
-                lbl = self.fonts["small"].render(name, True, txt_color)
-                surf.blit(lbl, (item_rect.x + 8, item_rect.y + 5))
-                item_rects.append(item_rect)
-
-        self.rects["log_items"] = item_rects
-        y += list_height + 16
-
-        # Indicador de scroll si hay mas archivos de los visibles
-        if len(self.log_files) > visible:
-            shown = f"{self.log_scroll + 1}-{min(self.log_scroll + visible, len(self.log_files))} de {len(self.log_files)}"
-            scroll_lbl = self.fonts["small"].render(shown, True, (130, 110, 150))
-            surf.blit(scroll_lbl, (list_rect.right - scroll_lbl.get_width() - 4, y - 14))
-
-        # Botones
-        confirm_enabled = self.selected_log is not None
-        confirm_rect = pygame.Rect(box_rect.right - pad - 170, y, 170, 36)
-        cancel_rect = pygame.Rect(box_rect.x + pad, y, 120, 36)
-
-        pygame.draw.rect(surf, REPLAY_ACCENT if confirm_enabled else (50, 40, 65),
-                         confirm_rect, border_radius=6)
-        pygame.draw.rect(surf, (55, 58, 74), cancel_rect, border_radius=6)
-
-        confirm_txt_color = (15, 10, 25) if confirm_enabled else (90, 80, 110)
-        confirm_lbl = self.fonts["label"].render("Iniciar Replay", True, confirm_txt_color)
-        cancel_lbl = self.fonts["label"].render("Cancelar", True, (170, 175, 185))
-        surf.blit(confirm_lbl, confirm_lbl.get_rect(center=confirm_rect.center))
-        surf.blit(cancel_lbl, cancel_lbl.get_rect(center=cancel_rect.center))
 
         self.rects["modal_confirm"] = confirm_rect
         self.rects["modal_cancel"] = cancel_rect
