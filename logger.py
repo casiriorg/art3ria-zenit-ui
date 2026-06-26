@@ -26,6 +26,7 @@ class CSVLogger(threading.Thread):
         """Inicializa la cola de comandos y el estado interno del logger."""
         super().__init__(daemon=False)
         self.cmd_queue: queue.Queue = queue.Queue()
+        self.summary_queue: queue.Queue = queue.Queue()
         self._exit_flag = False
 
         self._active = False
@@ -59,8 +60,10 @@ class CSVLogger(threading.Thread):
                 _, timestamp_iso, estado, datos_dict = item
                 self._append_row(timestamp_iso, estado, datos_dict)
             elif cmd in ("STOP", "ABORT"):
+                summary = self._compute_summary()
                 self._flush_to_disk()
                 self._active = False
+                self.summary_queue.put(summary)
 
     def _start(self, participant_name: str, session_id: str, audio_file: str):
         """Abre una nueva sesion: determina el nombre del CSV y reinicia el estado interno.
@@ -122,6 +125,62 @@ class CSVLogger(threading.Thread):
             writer.writerows(self._rows)
             f.flush()
         self._last_flush = time.monotonic()
+
+    def _compute_summary(self) -> dict:
+        """Calcula estadisticas de la sesion a partir de las filas acumuladas en memoria.
+
+        Solo procesa filas con estado 'record'. Se llama desde el thread del logger
+        antes de limpiar el buffer, por lo que no necesita sincronizacion adicional.
+
+        Returns:
+            Diccionario con claves: participant_name, audio_file, total_rows,
+            record_rows, duration_s, imu_count, signals (dict con min/mean/max/count
+            por senal), filepath.
+        """
+        if not self._rows:
+            return {}
+
+        record_rows = [r for r in self._rows if r.get("estado") == "record"]
+
+        duration_s = 0.0
+        if len(record_rows) >= 2:
+            try:
+                t0 = datetime.fromisoformat(record_rows[0]["timestamp"])
+                t1 = datetime.fromisoformat(record_rows[-1]["timestamp"])
+                duration_s = (t1 - t0).total_seconds()
+            except Exception:
+                pass
+
+        _fixed = {"timestamp", "participant_name", "session_id",
+                  "audio_file", "estado", "qw", "qx", "qy", "qz"}
+        signal_data: dict = {}
+        for row in record_rows:
+            for key, value in row.items():
+                if key in _fixed:
+                    continue
+                if isinstance(value, (int, float)):
+                    signal_data.setdefault(key, []).append(float(value))
+
+        signal_stats = {
+            key: {
+                "mean": sum(vals) / len(vals),
+                "min": min(vals),
+                "max": max(vals),
+                "count": len(vals),
+            }
+            for key, vals in signal_data.items() if vals
+        }
+
+        return {
+            "participant_name": self._meta.get("participant_name", ""),
+            "audio_file": self._meta.get("audio_file", ""),
+            "total_rows": len(self._rows),
+            "record_rows": len(record_rows),
+            "duration_s": duration_s,
+            "imu_count": sum(1 for r in record_rows if "qw" in r),
+            "signals": signal_stats,
+            "filepath": self._filepath or "",
+        }
 
     def start_session(self, participant_name: str, session_id: str, audio_file: str):
         """Encola el inicio de una nueva sesion de grabacion.
