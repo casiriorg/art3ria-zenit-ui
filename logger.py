@@ -152,7 +152,8 @@ class CSVLogger(threading.Thread):
                 pass
 
         _fixed = {"timestamp", "participant_name", "session_id",
-                  "audio_file", "estado", "qw", "qx", "qy", "qz"}
+                  "audio_file", "estado", "qw", "qx", "qy", "qz",
+                  "roll", "pitch", "yaw"}
         signal_data: dict = {}
         for row in record_rows:
             for key, value in row.items():

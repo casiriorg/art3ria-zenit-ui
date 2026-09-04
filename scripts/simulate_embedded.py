@@ -4,7 +4,7 @@ Escribe lineas con el mismo formato que espera `serial_reader.py`:
 
     IMU:qw,qx,qy,qz,roll,pitch,yaw
     PPG:valor
-    GSR:valor
+    GSR:raw,filtrado,variacion
     TEMP:valor
 
 La orientacion (roll/pitch/yaw) y cada senal fisiologica varian mediante un
@@ -54,16 +54,21 @@ EULER_RANGES_DEG = {
 EULER_STEP_DEG = 2.0
 
 # Rangos y paso maximo del "random walk" para cada senal fisiologica/comportamental
+# simple (formato CLAVE:valor). GSR se maneja aparte (formato GSR:raw,filtrado,variacion).
 SIGNAL_RANGES = {
     "PPG":  (55.0, 110.0),   # pulsaciones por minuto
-    "GSR":  (0.01, 0.08),    # conductancia (uS)
     "TEMP": (35.5, 37.5),    # temperatura corporal (C)
 }
 SIGNAL_STEPS = {
     "PPG":  1.5,
-    "GSR":  0.002,
     "TEMP": 0.05,
 }
+
+# Rango/paso del "random walk" de la senal GSR cruda, y peso de la muestra nueva
+# en el filtro pasabajos exponencial (EMA) que simula la etapa de filtrado del firmware.
+GSR_RANGE_US = (0.01, 0.08)   # conductancia (uS)
+GSR_STEP_US = 0.002
+GSR_FILTER_ALPHA = 0.2
 
 IMU_PACKET_PREFIX = "IMU"
 
@@ -72,16 +77,45 @@ IMU_PACKET_PREFIX = "IMU"
 # Utilidades
 # ---------------------------------------------------------------------------
 def clamp(value: float, lo: float, hi: float) -> float:
+    """Restringe un valor al rango [lo, hi].
+
+    Args:
+        value: Valor a restringir.
+        lo: Cota inferior del rango.
+        hi: Cota superior del rango.
+
+    Returns:
+        `value` si esta dentro del rango, o la cota mas cercana en caso contrario.
+    """
     return max(lo, min(hi, value))
 
 
 def random_walk(value: float, step: float, lo: float, hi: float) -> float:
-    """Da un paso aleatorio acotado dentro de [lo, hi]."""
+    """Da un paso aleatorio acotado dentro de [lo, hi].
+
+    Args:
+        value: Valor actual desde el que se da el paso.
+        step: Magnitud maxima del paso aleatorio (en cualquier direccion).
+        lo: Cota inferior del rango permitido.
+        hi: Cota superior del rango permitido.
+
+    Returns:
+        Nuevo valor tras el paso aleatorio, restringido a [lo, hi].
+    """
     return clamp(value + random.uniform(-step, step), lo, hi)
 
 
 def euler_to_quat(roll_deg: float, pitch_deg: float, yaw_deg: float):
-    """Convierte angulos Euler (grados) a quaternion (w,x,y,z)."""
+    """Convierte angulos Euler (grados) a quaternion (w,x,y,z).
+
+    Args:
+        roll_deg: Angulo de roll en grados.
+        pitch_deg: Angulo de pitch en grados.
+        yaw_deg: Angulo de yaw en grados.
+
+    Returns:
+        Tupla (w, x, y, z) con el quaternion equivalente.
+    """
     roll, pitch, yaw = (math.radians(a) for a in (roll_deg, pitch_deg, yaw_deg))
 
     cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
@@ -100,9 +134,18 @@ def euler_to_quat(roll_deg: float, pitch_deg: float, yaw_deg: float):
 # Simulacion
 # ---------------------------------------------------------------------------
 def simulation_loop(write):
-    """Genera datos sin fin, invocando `write(bytes)` para cada linea cuando corresponde."""
+    """Genera datos sin fin, invocando `write(bytes)` para cada linea cuando corresponde.
+
+    No retorna nunca por si misma; el caller la interrumpe (Ctrl+C, cierre del socket).
+
+    Args:
+        write: Funcion que recibe una linea codificada en bytes y la envia
+            (ej. `serial.Serial.write` o `socket.socket.sendall`).
+    """
     euler = {key: random.uniform(*rng) for key, rng in EULER_RANGES_DEG.items()}
     signals = {key: random.uniform(*rng) for key, rng in SIGNAL_RANGES.items()}
+    gsr_raw = random.uniform(*GSR_RANGE_US)
+    gsr_filtrado = gsr_raw
 
     next_imu = time.monotonic()
     next_signal = time.monotonic()
@@ -128,12 +171,30 @@ def simulation_loop(write):
                 lo, hi = SIGNAL_RANGES[key]
                 signals[key] = random_walk(signals[key], SIGNAL_STEPS[key], lo, hi)
                 write(f"{key}:{signals[key]:.4f}\n".encode("utf-8"))
+
+            prev_filtrado = gsr_filtrado
+            gsr_raw = random_walk(gsr_raw, GSR_STEP_US, *GSR_RANGE_US)
+            gsr_filtrado = prev_filtrado + GSR_FILTER_ALPHA * (gsr_raw - prev_filtrado)
+            gsr_variacion = gsr_filtrado - prev_filtrado
+            write(
+                f"GSR:{gsr_raw:.4f},{gsr_filtrado:.4f},{gsr_variacion:.4f}\n".encode("utf-8")
+            )
+
             next_signal += 1.0 / SIGNAL_RATE_HZ
 
         time.sleep(0.001)
 
 
 def run_serial(port: str, baud: int):
+    """Abre un puerto serial y transmite datos simulados indefinidamente.
+
+    Args:
+        port: Puerto serial a abrir (ej. 'COM10').
+        baud: Baudrate de la conexion.
+
+    Raises:
+        serial.SerialException: Si el puerto no puede abrirse.
+    """
     print(f"[sim] Abriendo {port} @ {baud}...")
     with serial.Serial(port, baud, timeout=1) as ser:
         print("[sim] Enviando datos simulados. Ctrl+C para detener.")
@@ -141,6 +202,16 @@ def run_serial(port: str, baud: int):
 
 
 def run_tcp(host: str, port: int):
+    """Levanta un servidor TCP local que transmite datos simulados a cada cliente.
+
+    Acepta clientes secuencialmente (uno a la vez): al desconectarse uno, vuelve
+    a esperar una nueva conexion. Pensado para que `main.py socket://host:puerto`
+    se conecte sin necesitar un puerto serial real ni drivers.
+
+    Args:
+        host: Direccion IP o hostname donde escuchar (ej. '127.0.0.1').
+        port: Puerto TCP donde escuchar.
+    """
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
@@ -169,6 +240,12 @@ def run_tcp(host: str, port: int):
 
 
 def main():
+    """Punto de entrada: parsea los argumentos de linea de comandos y arranca el modo elegido.
+
+    Raises:
+        SystemExit: Si el puerto serial no puede abrirse (codigo 1), o si
+            `argparse` detecta argumentos invalidos (manejado por argparse).
+    """
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

@@ -10,6 +10,8 @@ import serial.tools.list_ports
 
 from config import CFG
 
+GSR_PACKET_PREFIX = "GSR:"
+
 
 def find_port():
     """Autodetecta el puerto USB de la placa XIAO/nRF52.
@@ -95,6 +97,10 @@ class SerialReader(threading.Thread):
                     self._parse_imu(line[len(prefix):])
                     continue
 
+                if line.startswith(GSR_PACKET_PREFIX):
+                    self._parse_gsr(line[len(GSR_PACKET_PREFIX):])
+                    continue
+
                 if ":" in line:
                     self._parse_signal(line)
                     continue
@@ -121,7 +127,29 @@ class SerialReader(threading.Thread):
             self.quat = (qw, qx, qy, qz)
             self.euler = (r, p, y)
         self._samples.append(time.time())
-        self.log_queue.put((time.time(), {"qw": qw, "qx": qx, "qy": qy, "qz": qz}))
+        self.log_queue.put((time.time(), {
+            "qw": qw, "qx": qx, "qy": qy, "qz": qz,
+            "roll": r, "pitch": p, "yaw": y,
+        }))
+
+    def _parse_gsr(self, payload: str):
+        """Parsea el payload de un paquete GSR y actualiza el diccionario de senales.
+
+        Args:
+            payload: Cadena con 3 valores separados por coma: raw,filtrado,variacion.
+        """
+        parts = payload.split(",")
+        if len(parts) != 3:
+            return
+        try:
+            raw, filtrado, variacion = (float(v) for v in parts)
+        except ValueError:
+            return
+        data = {"GSR": filtrado, "GSR_raw": raw, "GSR_variacion": variacion}
+        with self.lock:
+            self.signals.update(data)
+        self._samples.append(time.time())
+        self.log_queue.put((time.time(), data))
 
     def _parse_signal(self, line: str):
         """Parsea una linea CLAVE:VALOR y actualiza el diccionario de senales.

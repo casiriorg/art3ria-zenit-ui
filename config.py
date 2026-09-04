@@ -3,9 +3,22 @@
 import json
 import os
 import shutil
+import sys
 
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_PATH = os.path.join(_BASE_DIR, "config.example.json")
+if getattr(sys, "frozen", False):
+    # Empaquetado con PyInstaller: __file__ resuelve dentro del bundle, no
+    # junto al .exe. _BASE_DIR (sys.executable) es donde deben vivir los
+    # archivos persistentes/editables (config.json, logs/, audio del usuario).
+    # _BUNDLE_DIR (sys._MEIPASS) es donde PyInstaller deja los recursos de
+    # solo lectura que trae el bundle (config.example.json, modelo 3D por
+    # defecto, WAV de prueba) — en onedir NO es la misma carpeta que el .exe
+    # (PyInstaller 6+ los anida en "_internal/" por defecto).
+    _BASE_DIR = os.path.dirname(sys.executable)
+    _BUNDLE_DIR = getattr(sys, "_MEIPASS", _BASE_DIR)
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _BUNDLE_DIR = _BASE_DIR
+_DEFAULT_PATH = os.path.join(_BUNDLE_DIR, "config.example.json")
 _CONFIG_PATH = os.path.join(_BASE_DIR, "config.json")
 
 
@@ -118,7 +131,10 @@ def ensure_dirs():
     """Crea las carpetas necesarias de la aplicacion si no existen.
 
     Crea assets/models/, CFG.audio_folder y CFG.logs_folder relativas
-    a la raiz del proyecto.
+    a la raiz del proyecto. Si la app corre empaquetada (PyInstaller),
+    tambien copia junto al .exe los recursos de solo lectura que trae el
+    bundle (modelo 3D por defecto y WAV de prueba) la primera vez que no
+    existen ahi, para que el comportamiento sea igual que corriendo el script.
     """
     for rel in (
         os.path.dirname(CFG.model_path),
@@ -127,6 +143,22 @@ def ensure_dirs():
     ):
         path = os.path.join(_BASE_DIR, rel)
         os.makedirs(path, exist_ok=True)
+
+    if _BUNDLE_DIR != _BASE_DIR:
+        _copy_bundled_defaults()
+
+
+def _copy_bundled_defaults():
+    """Copia junto al .exe los recursos de solo lectura empaquetados que falten.
+
+    No hace nada si el archivo de origen no esta en el bundle o si el destino
+    ya existe (para no pisar un modelo/audio que el usuario haya reemplazado).
+    """
+    for rel in (CFG.model_path, os.path.join(CFG.audio_folder, "test_tone.wav")):
+        src = os.path.join(_BUNDLE_DIR, rel)
+        dst = os.path.join(_BASE_DIR, rel)
+        if os.path.exists(src) and not os.path.exists(dst):
+            shutil.copyfile(src, dst)
 
 
 def abs_path(rel_path: str) -> str:

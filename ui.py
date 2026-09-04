@@ -878,7 +878,14 @@ class AppUI:
                          border_radius=4)
 
         def fmt_t(s):
-            """Formatea segundos a M:SS."""
+            """Formatea segundos a M:SS.
+
+            Args:
+                s: Cantidad de segundos a formatear.
+
+            Returns:
+                Cadena con el formato 'M:SS'.
+            """
             return f"{int(s) // 60}:{int(s) % 60:02d}"
 
         time_lbl = self.fonts["small"].render(
@@ -1039,7 +1046,12 @@ class AppUI:
         val_x = box_rect.x + pad + 175
 
         def meta_row(label, value):
-            """Dibuja una fila etiqueta-valor en el modal de resumen."""
+            """Dibuja una fila etiqueta-valor en el modal de resumen.
+
+            Args:
+                label: Texto de la etiqueta (columna izquierda).
+                value: Valor a mostrar (columna derecha); se convierte a str.
+            """
             nonlocal y
             surf.blit(self.fonts["small"].render(label, True, (140, 144, 156)), (lbl_x, y))
             surf.blit(self.fonts["label"].render(str(value), True, self.colors["text"]), (val_x, y))

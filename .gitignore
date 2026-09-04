@@ -16,6 +16,11 @@ logs/*
 assets/audio/*
 !assets/audio/test_tone.wav
 
+# Build del .exe (ver docs/specs-exe-installer.md).
+# art3ria.spec SI se versiona (es la config de build reproducible).
+build/
+dist/
+
 # Editor / OS
 .vscode/
 .idea/

@@ -64,7 +64,8 @@ class ReplayReader:
         self._participant_name = rows[0].get("participant_name", "")
 
         _fixed = {"timestamp", "participant_name", "session_id",
-                  "audio_file", "estado", "qw", "qx", "qy", "qz"}
+                  "audio_file", "estado", "qw", "qx", "qy", "qz",
+                  "roll", "pitch", "yaw"}
 
         t0 = datetime.fromisoformat(rows[0]["timestamp"])
         frames = []

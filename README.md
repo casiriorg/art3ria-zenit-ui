@@ -26,6 +26,7 @@ archivo CSV sincronizado con la reproduccion de audio.
    - [7.1 Protocolo serial](#71-protocolo-serial)
    - [7.2 Esquema del CSV](#72-esquema-del-csv)
 8. [Verificacion rapida](#8-verificacion-rapida)
+9. [Compilar a .exe (Windows)](#9-compilar-a-exe-windows)
 
 ---
 
@@ -232,17 +233,28 @@ IMU:qw,qx,qy,qz,roll,pitch,yaw
 ```
 Ejemplo: `IMU:0.999,0.01,-0.02,0.003,1.2,-0.5,45.3`
 
-**Senal fisiologica o comportamental:**
+**Senal fisiologica o comportamental (formato general):**
 ```
 CLAVE:VALOR
 ```
-Ejemplos:
+Ejemplo:
 ```
 PPG:89.45
-GSR:0.032
 ```
 `CLAVE` puede ser cualquier identificador de texto y `VALOR` debe ser numerico.
 Se soportan entre 1 y 20 senales distintas por sesion.
+
+**Senal GSR (caso especial, 3 valores):**
+```
+GSR:raw,filtrado,variacion
+```
+Ejemplo: `GSR:0.0315,0.0298,0.0012`
+
+A diferencia de las demas senales, GSR siempre llega con 3 valores separados por coma:
+la lectura cruda del sensor, la senal ya filtrada (pasabajos) y la variacion respecto
+a la muestra filtrada anterior. La app expone esto como tres senales independientes:
+`GSR` (valor filtrado, el que se muestra en el widget principal), `GSR_raw` y
+`GSR_variacion` (ambas visibles en el panel de "Senales adicionales" y en el CSV).
 
 Las lineas que comienzan con `#` se muestran en consola como mensajes de debug y son ignoradas por la app.
 
@@ -258,7 +270,8 @@ Cada sesion genera un archivo en `logs/` con estas columnas:
 | `audio_file` | Nombre del archivo de audio reproducido. |
 | `estado` | `waiting` durante las cuentas regresivas, `record` durante la reproduccion. |
 | `qw`, `qx`, `qy`, `qz` | Quaternion de orientacion del sensor IMU. |
-| *(senales dinamicas)* | Una columna por cada senal recibida (`PPG`, `GSR`, etc.). |
+| `roll`, `pitch`, `yaw` | Angulos Euler de orientacion (grados), derivados del mismo paquete IMU. |
+| *(senales dinamicas)* | Una columna por cada senal recibida (`PPG`, `GSR`, `GSR_raw`, `GSR_variacion`, etc.). |
 
 Las columnas de senales se crean automaticamente la primera vez que se recibe cada clave.
 Las filas anteriores a ese momento quedan con celdas vacias en esa columna.
@@ -274,3 +287,60 @@ python -m py_compile config.py serial_reader.py audio_player.py logger.py render
 ```
 
 Si no aparece ningun mensaje de error, todos los modulos estan bien.
+
+---
+
+## 9. Compilar a .exe (Windows)
+
+Se puede empaquetar la app como un `.exe` autocontenido (no requiere Python instalado
+en la maquina de destino) usando **PyInstaller**. El detalle completo de esta decision,
+el archivo `.spec`, el troubleshooting y las verificaciones ya corridas estan en
+[`docs/spec-exe-installer.md`](docs/spec-exe-installer.md) — esta seccion resume los
+pasos practicos para reproducir el build.
+
+### 9.1 Requisitos
+
+- Mismo entorno virtual del proyecto (seccion 2). `pyinstaller>=6.0` ya esta declarado
+  en `requirements.txt` (marcado como dependencia solo de build, no se importa en
+  runtime), asi que no hace falta instalarlo aparte.
+- El archivo `art3ria.spec` en la raiz del repo (ya versionado) define que se empaqueta:
+  entry point `main.py`, datos incluidos (`config.example.json`, `assets/models/`,
+  `assets/audio/test_tone.wav`) y los hidden imports necesarios para PyOpenGL/scipy.
+
+### 9.2 Build
+
+```
+python -m pip install -r requirements.txt
+python -m PyInstaller art3ria.spec --clean
+```
+
+Si ya existe una build previa en `dist/art3ria/`, agregar `--noconfirm` para
+sobreescribirla sin que PyInstaller pida confirmacion interactiva:
+
+```
+python -m PyInstaller art3ria.spec --clean --noconfirm
+```
+
+### 9.3 Resultado
+
+El build genera `dist/art3ria/`, con:
+
+- `art3ria.exe` — el ejecutable (~10 MB).
+- `_internal/` — dependencias y recursos empaquetados (~130-140 MB).
+
+**Para distribuir hay que copiar la carpeta `dist/art3ria/` completa**, no solo el
+`.exe` — sin `_internal/` al lado no arranca. Ni `build/` ni `dist/` se versionan en
+git (ver `.gitignore`); `art3ria.spec` si.
+
+Al primer arranque en una maquina, el `.exe` crea junto a si mismo `config.json`,
+`logs/` y `assets/audio/` (con `test_tone.wav` ya copiado adentro) y `assets/models/`
+(con el modelo 3D por defecto ya copiado adentro) — mismo comportamiento que corriendo
+`python main.py` en modo desarrollo.
+
+### 9.4 Verificacion
+
+Antes de dar por buena una build, correr `dist/art3ria/art3ria.exe` y confirmar al
+menos: la ventana abre y renderiza, un WAV de prueba se reproduce (valida el DLL de
+PortAudio), el simulador (seccion 3.3) alimenta datos IMU/senales correctamente, y una
+sesion grabada genera un CSV valido en `logs/`. El checklist completo esta en la
+seccion 7 de `docs/spec-exe-installer.md`.

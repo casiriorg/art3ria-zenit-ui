@@ -5,3 +5,7 @@ pyserial>=3.5
 sounddevice>=0.4.6
 scipy>=1.11.0
 numpy>=1.26.0
+
+# Solo necesario para empaquetar la app como .exe (ver docs/specs-exe-installer.md).
+# No se importa en runtime.
+pyinstaller>=6.0
