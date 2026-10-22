@@ -239,7 +239,7 @@ CLAVE:VALOR
 ```
 Ejemplo:
 ```
-PPG:89.45
+TEMP:36.6
 ```
 `CLAVE` puede ser cualquier identificador de texto y `VALOR` debe ser numerico.
 Se soportan entre 1 y 20 senales distintas por sesion.
@@ -255,6 +255,20 @@ la lectura cruda del sensor, la senal ya filtrada (pasabajos) y la variacion res
 a la muestra filtrada anterior. La app expone esto como tres senales independientes:
 `GSR` (valor filtrado, el que se muestra en el widget principal), `GSR_raw` y
 `GSR_variacion` (ambas visibles en el panel de "Senales adicionales" y en el CSV).
+
+**Senal PPG (caso especial, 6 valores):**
+```
+PPG:ir,red,bpm,bpm_valido,spo2,spo2_valido
+```
+Ejemplo: `PPG:36,2603,0.0,0,0.0,0`
+
+PPG siempre llega con 6 valores separados por coma: la lectura cruda del LED
+infrarrojo, la lectura cruda del LED rojo, las pulsaciones por minuto estimadas,
+un flag (0/1) de si el BPM es valido, el SpO2 estimado y un flag (0/1) de si el
+SpO2 es valido (requiere dedo presente y lectura valida). La app expone esto como
+seis senales independientes: `PPG` (BPM, el que se muestra en el widget principal),
+`PPG_ir`, `PPG_red`, `PPG_valido`, `PPG_spo2` y `PPG_spo2_valido` (estas ultimas
+visibles en el panel de "Senales adicionales" y en el CSV).
 
 Las lineas que comienzan con `#` se muestran en consola como mensajes de debug y son ignoradas por la app.
 

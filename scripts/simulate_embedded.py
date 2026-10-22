@@ -3,7 +3,7 @@
 Escribe lineas con el mismo formato que espera `serial_reader.py`:
 
     IMU:qw,qx,qy,qz,roll,pitch,yaw
-    PPG:valor
+    PPG:ir,red,bpm,bpm_valido,spo2,spo2_valido
     GSR:raw,filtrado,variacion
     TEMP:valor
 
@@ -54,13 +54,11 @@ EULER_RANGES_DEG = {
 EULER_STEP_DEG = 2.0
 
 # Rangos y paso maximo del "random walk" para cada senal fisiologica/comportamental
-# simple (formato CLAVE:valor). GSR se maneja aparte (formato GSR:raw,filtrado,variacion).
+# simple (formato CLAVE:valor). GSR y PPG se manejan aparte (formato multi-valor).
 SIGNAL_RANGES = {
-    "PPG":  (55.0, 110.0),   # pulsaciones por minuto
     "TEMP": (35.5, 37.5),    # temperatura corporal (C)
 }
 SIGNAL_STEPS = {
-    "PPG":  1.5,
     "TEMP": 0.05,
 }
 
@@ -69,6 +67,17 @@ SIGNAL_STEPS = {
 GSR_RANGE_US = (0.01, 0.08)   # conductancia (uS)
 GSR_STEP_US = 0.002
 GSR_FILTER_ALPHA = 0.2
+
+# Rangos y paso maximo del "random walk" para la senal PPG (formato PPG:ir,red,bpm,
+# bpm_valido,spo2,spo2_valido). ir/red simulan la amplitud cruda de los LEDs.
+PPG_IR_RANGE = (20000.0, 60000.0)
+PPG_RED_RANGE = (15000.0, 55000.0)
+PPG_BPM_RANGE = (55.0, 110.0)
+PPG_SPO2_RANGE = (94.0, 99.0)
+PPG_IR_STEP = 800.0
+PPG_RED_STEP = 800.0
+PPG_BPM_STEP = 1.5
+PPG_SPO2_STEP = 0.3
 
 IMU_PACKET_PREFIX = "IMU"
 
@@ -146,6 +155,10 @@ def simulation_loop(write):
     signals = {key: random.uniform(*rng) for key, rng in SIGNAL_RANGES.items()}
     gsr_raw = random.uniform(*GSR_RANGE_US)
     gsr_filtrado = gsr_raw
+    ppg_ir = random.uniform(*PPG_IR_RANGE)
+    ppg_red = random.uniform(*PPG_RED_RANGE)
+    ppg_bpm = random.uniform(*PPG_BPM_RANGE)
+    ppg_spo2 = random.uniform(*PPG_SPO2_RANGE)
 
     next_imu = time.monotonic()
     next_signal = time.monotonic()
@@ -178,6 +191,15 @@ def simulation_loop(write):
             gsr_variacion = gsr_filtrado - prev_filtrado
             write(
                 f"GSR:{gsr_raw:.4f},{gsr_filtrado:.4f},{gsr_variacion:.4f}\n".encode("utf-8")
+            )
+
+            ppg_ir = random_walk(ppg_ir, PPG_IR_STEP, *PPG_IR_RANGE)
+            ppg_red = random_walk(ppg_red, PPG_RED_STEP, *PPG_RED_RANGE)
+            ppg_bpm = random_walk(ppg_bpm, PPG_BPM_STEP, *PPG_BPM_RANGE)
+            ppg_spo2 = random_walk(ppg_spo2, PPG_SPO2_STEP, *PPG_SPO2_RANGE)
+            write(
+                f"PPG:{ppg_ir:.0f},{ppg_red:.0f},{ppg_bpm:.1f},1,{ppg_spo2:.1f},1\n"
+                .encode("utf-8")
             )
 
             next_signal += 1.0 / SIGNAL_RATE_HZ

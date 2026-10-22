@@ -11,6 +11,7 @@ import serial.tools.list_ports
 from config import CFG
 
 GSR_PACKET_PREFIX = "GSR:"
+PPG_PACKET_PREFIX = "PPG:"
 
 
 def find_port():
@@ -101,6 +102,10 @@ class SerialReader(threading.Thread):
                     self._parse_gsr(line[len(GSR_PACKET_PREFIX):])
                     continue
 
+                if line.startswith(PPG_PACKET_PREFIX):
+                    self._parse_ppg(line[len(PPG_PACKET_PREFIX):])
+                    continue
+
                 if ":" in line:
                     self._parse_signal(line)
                     continue
@@ -146,6 +151,33 @@ class SerialReader(threading.Thread):
         except ValueError:
             return
         data = {"GSR": filtrado, "GSR_raw": raw, "GSR_variacion": variacion}
+        with self.lock:
+            self.signals.update(data)
+        self._samples.append(time.time())
+        self.log_queue.put((time.time(), data))
+
+    def _parse_ppg(self, payload: str):
+        """Parsea el payload de un paquete PPG y actualiza el diccionario de senales.
+
+        Args:
+            payload: Cadena con 6 valores separados por coma: ir,red,bpm,bpm_valido,
+                spo2,spo2_valido.
+        """
+        parts = payload.split(",")
+        if len(parts) != 6:
+            return
+        try:
+            ir, red, bpm, bpm_valido, spo2, spo2_valido = (float(v) for v in parts)
+        except ValueError:
+            return
+        data = {
+            "PPG": bpm,
+            "PPG_ir": ir,
+            "PPG_red": red,
+            "PPG_valido": bpm_valido,
+            "PPG_spo2": spo2,
+            "PPG_spo2_valido": spo2_valido,
+        }
         with self.lock:
             self.signals.update(data)
         self._samples.append(time.time())
